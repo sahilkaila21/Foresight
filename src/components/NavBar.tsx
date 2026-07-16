@@ -36,7 +36,12 @@ export default async function NavBar() {
               >
                 {formatMoney(user.balance)}
               </Link>
-              <span className="text-zinc-600 dark:text-zinc-400">@{user.username}</span>
+              <Link
+                href={`/users/${user.username}`}
+                className="text-zinc-600 hover:underline dark:text-zinc-400"
+              >
+                @{user.username}
+              </Link>
               <LogoutButton />
             </>
           ) : (

@@ -89,7 +89,12 @@ export default function CommentSection({
           {comments.map((c) => (
             <li key={c.id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
               <div className="mb-1 flex items-center gap-2 text-xs text-zinc-500">
-                <span className="font-medium text-zinc-700 dark:text-zinc-300">@{c.username}</span>
+                <Link
+                  href={`/users/${c.username}`}
+                  className="font-medium text-zinc-700 hover:underline dark:text-zinc-300"
+                >
+                  @{c.username}
+                </Link>
                 <span>·</span>
                 <span>{formatDateTime(c.createdAt)}</span>
               </div>

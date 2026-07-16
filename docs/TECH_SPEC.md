@@ -117,7 +117,7 @@ Validation errors return `400 {error}`, auth failures `401`, ownership failures 
 ## 8. Roadmap
 
 **Shipped since v1**
-- ✅ Probability history chart, portfolio with P/L, leaderboard.
+- ✅ Probability history chart (binary + categorical), portfolio with P/L, leaderboard.
 - ✅ Market search, status filters, sorting; comments.
 - ✅ Multi-outcome (categorical) markets — the LMSR engine is generalized to N
   outcomes (`costN`/`pricesN`/`sharesForSpendN`/`buyN`/`sellN`), with binary as
@@ -127,7 +127,14 @@ Validation errors return `400 {error}`, auth failures `401`, ownership failures 
   Worst-case maker subsidy generalizes to `b · ln(N)`.
 
 **Still ahead**
-- Categorical probability-history chart (binary chart is single-line today).
 - Admin/oracle resolution + dispute flow (replace creator-resolves trust model).
 - Loans/daily bonuses to keep the play-money economy liquid.
 - Market tags/categories; Postgres + hosting (Vercel/Fly), rate limiting, audit log.
+
+**Longer-term direction: decentralization / on-chain settlement**
+The money layer today is float play-points in Prisma. The intended future is a
+decentralized, blockchain-backed version where settlement (balances, trades,
+resolution, payouts) lives on-chain — e.g. a smart-contract LMSR/AMM with this
+app acting as frontend + indexer, and oracle-based resolution. Chain and design
+are not yet chosen; the current engine (`src/lib/lmsr.ts`) is written as pure
+math so it can inform or port to a contract implementation.

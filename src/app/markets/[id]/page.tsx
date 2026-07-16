@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
@@ -111,7 +112,11 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           )}
         </div>
         <p className="mt-2 text-sm text-zinc-500">
-          by @{market.creator.username} ·{" "}
+          by{" "}
+          <Link href={`/users/${market.creator.username}`} className="hover:underline">
+            @{market.creator.username}
+          </Link>{" "}
+          ·{" "}
           {market.resolution
             ? `resolved "${labelOf(market.resolution)}" on ${formatDate(market.resolvedAt!)}`
             : open
@@ -234,7 +239,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
                   className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
                 >
                   <span>
-                    <span className="font-medium">@{t.user.username}</span>{" "}
+                    <Link
+                      href={`/users/${t.user.username}`}
+                      className="font-medium hover:underline"
+                    >
+                      @{t.user.username}
+                    </Link>{" "}
                     {t.shares >= 0 ? "bought" : "sold"} {formatShares(Math.abs(t.shares))}{" "}
                     <span className={yesNoColor}>{labelOf(t.outcome)}</span> for{" "}
                     {formatMoney(Math.abs(t.cost))}

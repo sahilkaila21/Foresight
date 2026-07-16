@@ -1,11 +1,9 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/format";
-import { probYes } from "@/lib/lmsr";
-import { pricedOutcomes } from "@/lib/market";
+import { openPositionsValue, START_BALANCE } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
-
-const START_BALANCE = 1000;
 
 export default async function LeaderboardPage() {
   const users = await prisma.user.findMany({
@@ -20,20 +18,7 @@ export default async function LeaderboardPage() {
 
   const ranked = users
     .map((u) => {
-      // Mark open positions to market; resolved positions are already zeroed.
-      const positionValue = u.positions.reduce((sum, pos) => {
-        const m = pos.market;
-        if (m.resolution) return sum;
-        let price: number;
-        if (m.kind === "CATEGORICAL") {
-          const priced = pricedOutcomes(m.outcomes, m.liquidityB);
-          price = priced.find((o) => o.id === pos.outcome)?.price ?? 0;
-        } else {
-          const p = probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB });
-          price = pos.outcome === "YES" ? p : 1 - p;
-        }
-        return sum + pos.shares * price;
-      }, 0);
+      const positionValue = openPositionsValue(u.positions);
       const netWorth = u.balance + positionValue;
       return {
         id: u.id,
@@ -65,7 +50,11 @@ export default async function LeaderboardPage() {
             {ranked.map((u, i) => (
               <tr key={u.id} className="border-b border-zinc-100 dark:border-zinc-900">
                 <td className="py-2 pr-4">{["🥇", "🥈", "🥉"][i] ?? i + 1}</td>
-                <td className="py-2 pr-4 font-medium">@{u.username}</td>
+                <td className="py-2 pr-4 font-medium">
+                  <Link href={`/users/${u.username}`} className="hover:underline">
+                    @{u.username}
+                  </Link>
+                </td>
                 <td className="py-2 pr-4 text-right text-zinc-500">{u.trades}</td>
                 <td className="py-2 pr-4 text-right font-mono">{formatMoney(u.positionValue)}</td>
                 <td className="py-2 pr-4 text-right font-mono font-semibold">
