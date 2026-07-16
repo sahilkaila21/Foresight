@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  passwordHash String
+  balance      Float      @default(1000)
+  createdAt    DateTime   @default(now())
+  markets      Market[]
+  trades       Trade[]
+  positions    Position[]
+}
+
+model Market {
+  id          String     @id @default(cuid())
+  question    String
+  description String     @default("")
+  closesAt    DateTime
+  liquidityB  Float      @default(100)
+  qYes        Float      @default(0)
+  qNo         Float      @default(0)
+  resolution  String? // "YES" | "NO"
+  resolvedAt  DateTime?
+  creatorId   String
+  creator     User       @relation(fields: [creatorId], references: [id])
+  createdAt   DateTime   @default(now())
+  trades      Trade[]
+  positions   Position[]
+}
+
+model Trade {
+  id        String   @id @default(cuid())
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  outcome   String // "YES" | "NO"
+  shares    Float // positive = buy, negative = sell
+  cost      Float // positive = user paid, negative = user received
+  probAfter Float
+  createdAt DateTime @default(now())
+
+  @@index([marketId, createdAt])
+}
+
+model Position {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id])
+  marketId String
+  market   Market @relation(fields: [marketId], references: [id])
+  outcome  String // "YES" | "NO"
+  shares   Float  @default(0)
+
+  @@unique([userId, marketId, outcome])
+}

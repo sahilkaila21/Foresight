@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🔮 Foresight — play-money prediction markets
 
-## Getting Started
+Users create YES/NO questions about future events and trade shares against an
+LMSR automated market maker. Prices are probabilities; winning shares pay ₱1
+at resolution. Full design in [docs/TECH_SPEC.md](docs/TECH_SPEC.md).
 
-First, run the development server:
+## Quickstart
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run db:push    # create SQLite db from prisma/schema.prisma
+npm run db:seed    # demo users (alice/bob, password "password123") + 3 markets
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Scripts
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Dev server |
+| `npm test` | LMSR engine unit tests (Vitest) |
+| `npm run build` / `npm start` | Production build / serve |
+| `npm run db:push` | Sync Prisma schema to SQLite |
+| `npm run db:seed` | Seed demo users, markets, trades |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Layout
 
-## Learn More
+```
+docs/TECH_SPEC.md          full technical specification
+prisma/schema.prisma       User, Market, Trade, Position
+prisma/seed.ts             demo data (runs real LMSR trades)
+src/lib/lmsr.ts            market maker math (pure, unit-tested)
+src/lib/session.ts         JWT cookie sessions (jose + bcryptjs)
+src/app/api/               auth, markets, trade, resolve route handlers
+src/app/                   market list, detail, create, login/signup pages
+src/components/            TradePanel, ResolvePanel, NavBar, AuthForm
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Next.js 16 (App Router) · TypeScript · Tailwind 4 · Prisma 6 + SQLite (Postgres-ready) · Vitest
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**v1 trust model:** market creators resolve their own markets; money is play-money only.
+Roadmap (multi-outcome markets, oracle resolution, leaderboards) is in the spec.
