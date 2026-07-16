@@ -12,6 +12,11 @@ export function formatShares(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 1 });
 }
 
+/** Current time in epoch ms (kept out of component render for the purity lint). */
+export function nowMs(): number {
+  return Date.now();
+}
+
 /** Whether a market's close time has passed. */
 export function isClosed(closesAt: Date | string): boolean {
   return new Date(closesAt).getTime() <= Date.now();

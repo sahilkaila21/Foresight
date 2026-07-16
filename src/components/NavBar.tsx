@@ -19,13 +19,23 @@ export default async function NavBar() {
           >
             Create market
           </Link>
+          <Link
+            href="/leaderboard"
+            className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Leaderboard
+          </Link>
         </div>
         <div className="flex items-center gap-4 text-sm">
           {user ? (
             <>
-              <span className="font-mono font-medium text-emerald-600 dark:text-emerald-400">
+              <Link
+                href="/portfolio"
+                className="font-mono font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                title="Portfolio"
+              >
                 {formatMoney(user.balance)}
-              </span>
+              </Link>
               <span className="text-zinc-600 dark:text-zinc-400">@{user.username}</span>
               <LogoutButton />
             </>

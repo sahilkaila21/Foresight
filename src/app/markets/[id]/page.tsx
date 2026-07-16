@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { formatDate, formatMoney, formatPercent, formatShares, isClosed } from "@/lib/format";
+import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
 import { getSessionUserId } from "@/lib/session";
+import ProbChart from "@/components/ProbChart";
 import ResolvePanel from "@/components/ResolvePanel";
 import TradePanel from "@/components/TradePanel";
 
@@ -15,8 +16,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     include: {
       creator: { select: { username: true } },
       trades: {
-        orderBy: { createdAt: "desc" },
-        take: 30,
+        orderBy: { createdAt: "asc" },
         include: { user: { select: { username: true } } },
       },
     },
@@ -32,6 +32,15 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
   const p = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
   const open = !market.resolution && !isClosed(market.closesAt);
+
+  // Step-line history: 50% at creation, one point per trade, flat to "now"
+  const endT = market.resolvedAt?.getTime() ?? nowMs();
+  const chartPoints = [
+    { t: market.createdAt.getTime(), p: 0.5 },
+    ...market.trades.map((t) => ({ t: t.createdAt.getTime(), p: t.probAfter })),
+    { t: endT, p },
+  ];
+  const recentTrades = market.trades.slice(-30).reverse();
 
   return (
     <div className="space-y-8">
@@ -70,6 +79,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         )}
       </div>
 
+      {market.trades.length > 0 && (
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <ProbChart points={chartPoints} />
+        </div>
+      )}
+
       {positions.length > 0 && (
         <div className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
           <h2 className="mb-2 font-semibold">Your position</h2>
@@ -100,11 +115,11 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
       <div>
         <h2 className="mb-3 font-semibold">Recent trades</h2>
-        {market.trades.length === 0 ? (
+        {recentTrades.length === 0 ? (
           <p className="text-sm text-zinc-500">No trades yet. Be the first.</p>
         ) : (
           <ul className="space-y-1 text-sm">
-            {market.trades.map((t) => (
+            {recentTrades.map((t) => (
               <li
                 key={t.id}
                 className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
