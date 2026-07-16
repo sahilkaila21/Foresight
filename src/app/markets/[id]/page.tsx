@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
 import { getSessionUserId } from "@/lib/session";
+import CommentSection from "@/components/CommentSection";
 import ProbChart from "@/components/ProbChart";
 import ResolvePanel from "@/components/ResolvePanel";
 import TradePanel from "@/components/TradePanel";
@@ -29,6 +30,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         where: { userId, marketId: id, shares: { gt: 1e-9 } },
       })
     : [];
+
+  const comments = await prisma.comment.findMany({
+    where: { marketId: id },
+    orderBy: { createdAt: "desc" },
+    include: { user: { select: { username: true } } },
+  });
 
   const p = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
   const open = !market.resolution && !isClosed(market.closesAt);
@@ -146,6 +153,17 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           </ul>
         )}
       </div>
+
+      <CommentSection
+        marketId={market.id}
+        signedIn={!!userId}
+        initial={comments.map((c) => ({
+          id: c.id,
+          username: c.user.username,
+          body: c.body,
+          createdAt: c.createdAt.toISOString(),
+        }))}
+      />
     </div>
   );
 }

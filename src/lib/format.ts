@@ -29,3 +29,12 @@ export function formatDate(d: Date | string): string {
     year: "numeric",
   });
 }
+
+export function formatDateTime(d: Date | string): string {
+  return new Date(d).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

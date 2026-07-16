@@ -16,6 +16,7 @@ model User {
   markets      Market[]
   trades       Trade[]
   positions    Position[]
+  comments     Comment[]
 }
 
 model Market {
@@ -33,6 +34,7 @@ model Market {
   createdAt   DateTime   @default(now())
   trades      Trade[]
   positions   Position[]
+  comments    Comment[]
 }
 
 model Trade {
@@ -60,4 +62,16 @@ model Position {
   shares   Float  @default(0)
 
   @@unique([userId, marketId, outcome])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([marketId, createdAt])
 }

@@ -1,13 +1,39 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { formatDate, formatPercent, isClosed } from "@/lib/format";
+import { formatDate, formatPercent, isClosed, nowMs } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
+import MarketFilters from "@/components/MarketFilters";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+type Search = { q?: string; status?: string; sort?: string };
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}) {
+  const { q = "", status = "all", sort = "new" } = await searchParams;
+  const now = new Date(nowMs());
+
+  const where: Prisma.MarketWhereInput = {};
+  if (q.trim()) where.question = { contains: q.trim() };
+  if (status === "open") where.AND = [{ resolution: null }, { closesAt: { gt: now } }];
+  else if (status === "closed") where.AND = [{ resolution: null }, { closesAt: { lte: now } }];
+  else if (status === "resolved") where.resolution = { not: null };
+
+  const orderBy: Prisma.MarketOrderByWithRelationInput =
+    sort === "active"
+      ? { trades: { _count: "desc" } }
+      : sort === "closing"
+        ? { closesAt: "asc" }
+        : { createdAt: "desc" };
+
   const markets = await prisma.market.findMany({
-    orderBy: { createdAt: "desc" },
+    where,
+    orderBy,
     include: {
       creator: { select: { username: true } },
       _count: { select: { trades: true } },
@@ -17,13 +43,22 @@ export default async function HomePage() {
   return (
     <div>
       <h1 className="mb-6 text-2xl font-bold">Markets</h1>
+      <Suspense>
+        <MarketFilters />
+      </Suspense>
       {markets.length === 0 ? (
         <p className="text-zinc-500">
-          No markets yet.{" "}
-          <Link href="/markets/new" className="underline">
-            Create the first one
-          </Link>
-          .
+          {q.trim() || status !== "all" ? (
+            "No markets match these filters."
+          ) : (
+            <>
+              No markets yet.{" "}
+              <Link href="/markets/new" className="underline">
+                Create the first one
+              </Link>
+              .
+            </>
+          )}
         </p>
       ) : (
         <ul className="space-y-3">
