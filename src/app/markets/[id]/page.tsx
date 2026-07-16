@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
-import { probYes } from "@/lib/lmsr";
+import { pricesN, probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
 import { getSessionUserId } from "@/lib/session";
 import CategoricalResolvePanel from "@/components/CategoricalResolvePanel";
 import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
+import MultiProbChart, { type Series } from "@/components/MultiProbChart";
 import ProbChart from "@/components/ProbChart";
 import ResolvePanel from "@/components/ResolvePanel";
 import TradePanel from "@/components/TradePanel";
@@ -50,13 +51,38 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const open = !market.resolution && !isClosed(market.closesAt);
   const yesProb = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
 
-  // Binary probability history (categorical charting is left for a later pass)
   const endT = market.resolvedAt?.getTime() ?? nowMs();
+
+  // Binary probability history: probAfter is stored per trade, so read it directly.
   const chartPoints = [
     { t: market.createdAt.getTime(), p: 0.5 },
     ...market.trades.map((t) => ({ t: t.createdAt.getTime(), p: t.probAfter })),
     { t: endT, p: yesProb },
   ];
+
+  // Categorical history: only the traded outcome's price is stored per trade, so
+  // replay the ledger through the engine to recover every outcome's price at each step.
+  let catSeries: Series[] = [];
+  if (isCategorical && market.trades.length > 0) {
+    const sorted = [...market.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
+    const idxById = new Map(sorted.map((o, i) => [o.id, i]));
+    const q = sorted.map(() => 0);
+    const n = sorted.length;
+    const pts = sorted.map(() => [{ t: market.createdAt.getTime(), p: 1 / n }]);
+    for (const t of market.trades) {
+      const idx = idxById.get(t.outcome);
+      if (idx === undefined) continue;
+      q[idx] += t.shares;
+      const prices = pricesN(q, market.liquidityB);
+      sorted.forEach((_, i) => pts[i].push({ t: t.createdAt.getTime(), p: prices[i] }));
+    }
+    const endPrices = pricesN(q, market.liquidityB);
+    catSeries = sorted.map((o, i) => ({
+      label: o.label,
+      points: [...pts[i], { t: endT, p: endPrices[i] }],
+    }));
+  }
+
   const recentTrades = market.trades.slice(-30).reverse();
   const holdings = Object.fromEntries(positions.map((p) => [p.outcome, p.shares]));
 
@@ -98,6 +124,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           </p>
         )}
       </div>
+
+      {isCategorical && catSeries.length > 0 && (
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <MultiProbChart series={catSeries} />
+        </div>
+      )}
 
       {isCategorical ? (
         <div className="space-y-2">
