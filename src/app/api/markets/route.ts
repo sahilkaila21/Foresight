@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isCategory } from "@/lib/categories";
 import { prisma } from "@/lib/db";
 import { probYes } from "@/lib/lmsr";
 import { marketHeadline, pricedOutcomes } from "@/lib/market";
@@ -22,12 +23,14 @@ export async function GET() {
         question: m.question,
         description: m.description,
         kind: m.kind,
+        category: m.category,
         closesAt: m.closesAt,
         resolution: m.resolution,
         resolvedAt: m.resolvedAt,
         creator: m.creator.username,
         createdAt: m.createdAt,
         tradeCount: m._count.trades,
+        volume: m.volume,
         // Binary: chance of YES. Categorical: leading outcome + all prices.
         probYes:
           m.kind === "CATEGORICAL"
@@ -56,6 +59,7 @@ export async function POST(req: Request) {
   const description = typeof body?.description === "string" ? body.description.trim() : "";
   const closesAt = new Date(body?.closesAt ?? NaN);
   const kind = body?.kind === "CATEGORICAL" ? "CATEGORICAL" : "BINARY";
+  const category = isCategory(body?.category) ? body.category : "Other";
 
   if (question.length < 10 || question.length > 200) {
     return NextResponse.json({ error: "Question must be 10-200 characters" }, { status: 400 });
@@ -90,6 +94,7 @@ export async function POST(req: Request) {
       description,
       closesAt,
       kind,
+      category,
       creatorId: user.id,
       outcomes:
         kind === "CATEGORICAL"

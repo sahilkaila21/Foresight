@@ -18,7 +18,7 @@ async function tradeBinary(userId: string, marketId: string, outcome: Outcome, s
   await prisma.$transaction([
     prisma.market.update({
       where: { id: marketId },
-      data: { qYes: r.newState.qYes, qNo: r.newState.qNo },
+      data: { qYes: r.newState.qYes, qNo: r.newState.qNo, volume: { increment: spend } },
     }),
     prisma.user.update({ where: { id: userId }, data: { balance: { decrement: spend } } }),
     prisma.position.upsert({
@@ -43,6 +43,7 @@ async function tradeCategorical(userId: string, marketId: string, outcomeIdx: nu
   const outcome = sorted[outcomeIdx].id;
   await prisma.$transaction([
     prisma.outcome.update({ where: { id: outcome }, data: { q: r.newQ[outcomeIdx] } }),
+    prisma.market.update({ where: { id: marketId }, data: { volume: { increment: spend } } }),
     prisma.user.update({ where: { id: userId }, data: { balance: { decrement: spend } } }),
     prisma.position.upsert({
       where: { userId_marketId_outcome: { userId, marketId, outcome } },
@@ -88,17 +89,32 @@ async function main() {
         question: "Will SpaceX land Starship on Mars by end of 2028?",
         description:
           "Resolves YES if a SpaceX Starship vehicle performs a soft landing on the Martian surface before 2029-01-01 UTC, per official SpaceX or NASA confirmation.",
+        category: "Science",
         closesAt: new Date("2028-12-31T23:59:00Z"),
       },
       {
         question: "Will the S&P 500 close above 8,000 before the end of 2026?",
         description: "Resolves YES if any official daily close of the S&P 500 index exceeds 8,000 in 2026.",
+        category: "Economics",
         closesAt: new Date("2026-12-31T21:00:00Z"),
       },
       {
         question: "Will it rain in Mumbai on New Year's Day 2027?",
         description: "Resolves YES if IMD records measurable precipitation (≥0.1mm) at Santacruz station on 2027-01-01.",
+        category: "Science",
         closesAt: new Date("2027-01-01T18:00:00Z"),
+      },
+      {
+        question: "Will Bitcoin close above $150,000 at any point in 2026?",
+        description: "Resolves YES if BTC/USD prints above 150,000 on a major exchange during 2026.",
+        category: "Crypto",
+        closesAt: new Date("2026-12-31T23:59:00Z"),
+      },
+      {
+        question: "Will a sequel be the highest-grossing film of 2027?",
+        description: "Resolves YES if the top worldwide box-office film of 2027 is a sequel or franchise entry.",
+        category: "Culture",
+        closesAt: new Date("2027-12-31T23:59:00Z"),
       },
     ].map((m) => prisma.market.create({ data: { ...m, creatorId: alice.id } }))
   );
@@ -108,6 +124,9 @@ async function main() {
   await tradeBinary(bob.id, binaries[1].id, "YES", 90);
   await tradeBinary(alice.id, binaries[1].id, "YES", 30);
   await tradeBinary(bob.id, binaries[2].id, "NO", 60);
+  await tradeBinary(bob.id, binaries[3].id, "YES", 200);
+  await tradeBinary(alice.id, binaries[3].id, "NO", 45);
+  await tradeBinary(alice.id, binaries[4].id, "YES", 25);
 
   // A categorical (multiple-choice) market.
   const labels = ["Democrat", "Republican", "Independent"];
@@ -116,6 +135,7 @@ async function main() {
       question: "Which party wins the 2028 US presidential election?",
       description: "Resolves to the party of the winning candidate per certified electoral results.",
       kind: "CATEGORICAL",
+      category: "Politics",
       closesAt: new Date("2028-11-07T23:59:00Z"),
       creatorId: alice.id,
       outcomes: { create: labels.map((label, i) => ({ label, sortOrder: i })) },
@@ -143,7 +163,9 @@ async function main() {
   console.log(
     `  ${e.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
   );
-  console.log("Seeded: alice & bob (password 'password123'), 3 binary + 1 categorical market.");
+  console.log(
+    `Seeded: alice & bob (password 'password123'), ${binaries.length} binary + 1 categorical market.`
+  );
 }
 
 main()

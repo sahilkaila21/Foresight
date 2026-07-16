@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CATEGORIES } from "@/lib/categories";
 
 type Kind = "BINARY" | "CATEGORICAL";
 
@@ -10,6 +11,7 @@ export default function NewMarketPage() {
   const [kind, setKind] = useState<Kind>("BINARY");
   const [question, setQuestion] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<string>("Other");
   const [closesAt, setClosesAt] = useState("");
   const [outcomes, setOutcomes] = useState<string[]>(["", ""]);
   const [busy, setBusy] = useState(false);
@@ -36,6 +38,7 @@ export default function NewMarketPage() {
         question,
         description,
         kind,
+        category,
         closesAt: closesAt ? new Date(closesAt).toISOString() : null,
         outcomes: kind === "CATEGORICAL" ? outcomes.map((o) => o.trim()).filter(Boolean) : undefined,
       }),
@@ -151,15 +154,31 @@ export default function NewMarketPage() {
             className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
           />
         </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Closes at</label>
-          <input
-            type="datetime-local"
-            value={closesAt}
-            onChange={(e) => setClosesAt(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
-            required
-          />
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <label className="mb-1 block text-sm font-medium">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-sm font-medium">Closes at</label>
+            <input
+              type="datetime-local"
+              value={closesAt}
+              onChange={(e) => setClosesAt(e.target.value)}
+              className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
+              required
+            />
+          </div>
         </div>
         {error && <p className="text-sm text-rose-600">{error}</p>}
         <button

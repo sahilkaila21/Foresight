@@ -103,6 +103,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         });
       }
 
+      await tx.market.update({
+        where: { id },
+        data: { volume: { increment: Math.abs(cost) } },
+      });
       await tx.user.update({ where: { id: userId }, data: { balance: { decrement: cost } } });
       await tx.position.upsert({
         where: { userId_marketId_outcome: { userId, marketId: id, outcome: key } },

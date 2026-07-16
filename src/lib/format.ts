@@ -12,6 +12,14 @@ export function formatShares(n: number): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: 1 });
 }
 
+/** Compact money for volume/liquidity, e.g. ₱950, ₱1.2k, ₱3.4m. */
+export function formatCompact(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `₱${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}m`;
+  if (abs >= 1_000) return `₱${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `₱${Math.round(n)}`;
+}
+
 /** Current time in epoch ms (kept out of component render for the purity lint). */
 export function nowMs(): number {
   return Date.now();

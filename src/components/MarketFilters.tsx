@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { CATEGORIES } from "@/lib/categories";
 
 const STATUSES = [
   ["all", "All"],
@@ -12,6 +13,7 @@ const STATUSES = [
 
 const SORTS = [
   ["new", "Newest"],
+  ["volume", "Volume"],
   ["active", "Most active"],
   ["closing", "Closing soon"],
 ] as const;
@@ -24,6 +26,7 @@ export default function MarketFilters() {
 
   const status = params.get("status") ?? "all";
   const sort = params.get("sort") ?? "new";
+  const category = params.get("category") ?? "";
   const [search, setSearch] = useState(params.get("q") ?? "");
 
   // Push a new query string, preserving the params we aren't changing.
@@ -55,6 +58,16 @@ export default function MarketFilters() {
         placeholder="Search markets…"
         className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
       />
+      <div className="flex flex-wrap gap-1.5">
+        <Chip active={category === ""} onClick={() => update({ category: "" })}>
+          All
+        </Chip>
+        {CATEGORIES.map((c) => (
+          <Chip key={c} active={category === c} onClick={() => update({ category: c })}>
+            {c}
+          </Chip>
+        ))}
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1">
           {STATUSES.map(([key, label]) => (
@@ -87,5 +100,28 @@ export default function MarketFilters() {
         </label>
       </div>
     </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-full border px-3 py-1 text-xs transition ${
+        active
+          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+          : "border-zinc-200 text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-400"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

@@ -17,10 +17,18 @@ interface Props {
   outcomes: PanelOutcome[]; // ordered
   b: number;
   signedIn: boolean;
+  balance: number;
   holdings: Record<string, number>; // outcomeId -> shares held
 }
 
-export default function CategoricalTradePanel({ marketId, outcomes, b, signedIn, holdings }: Props) {
+export default function CategoricalTradePanel({
+  marketId,
+  outcomes,
+  b,
+  signedIn,
+  balance,
+  holdings,
+}: Props) {
   const router = useRouter();
   const [selected, setSelected] = useState(0);
   const [mode, setMode] = useState<"buy" | "sell">("buy");
@@ -35,18 +43,20 @@ export default function CategoricalTradePanel({ marketId, outcomes, b, signedIn,
   const active = outcomes[selected];
   const held = holdings[active.id] ?? 0;
 
-  let preview: string | null = null;
-  if (valid) {
-    if (mode === "buy") {
-      const r = buyN(q, b, selected, num);
-      preview = `≈ ${formatShares(r.shares)} shares · pays ${formatMoney(
-        r.shares
-      )} if "${active.label}" · moves to ${formatPercent(r.pricesAfter[selected])}`;
-    } else if (num <= held) {
-      const r = sellN(q, b, selected, num);
-      preview = `receive ${formatMoney(-r.cost)} · moves to ${formatPercent(r.pricesAfter[selected])}`;
-    }
+  function addAmount(delta: number) {
+    setAmount(String(Math.max(0, Math.round(((Number(amount) || 0) + delta) * 100) / 100)));
   }
+  function setMax() {
+    setAmount(String(Math.floor((mode === "buy" ? balance : held) * 100) / 100));
+  }
+
+  let buyResult: ReturnType<typeof buyN> | null = null;
+  let sellResult: ReturnType<typeof sellN> | null = null;
+  if (valid) {
+    if (mode === "buy") buyResult = buyN(q, b, selected, num);
+    else if (num <= held) sellResult = sellN(q, b, selected, num);
+  }
+  const returnPct = buyResult && num > 0 ? ((buyResult.shares - num) / num) * 100 : 0;
 
   async function submit() {
     setBusy(true);
@@ -132,8 +142,9 @@ export default function CategoricalTradePanel({ marketId, outcomes, b, signedIn,
       </div>
 
       <div className="mt-4">
-        <label className="mb-1 block text-xs text-zinc-500">
-          {mode === "buy" ? "Spend (₱)" : `Shares to sell (max ${formatShares(held)})`}
+        <label className="mb-1 flex justify-between text-xs text-zinc-500">
+          <span>{mode === "buy" ? "Spend (₱)" : `Shares to sell (max ${formatShares(held)})`}</span>
+          {mode === "buy" && <span>Balance {formatMoney(balance)}</span>}
         </label>
         <input
           type="number"
@@ -143,9 +154,47 @@ export default function CategoricalTradePanel({ marketId, outcomes, b, signedIn,
           onChange={(e) => setAmount(e.target.value)}
           className="w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 font-mono dark:border-zinc-700"
         />
+        <div className="mt-2 flex gap-1.5">
+          {mode === "buy" &&
+            [10, 50, 100].map((d) => (
+              <button
+                key={d}
+                onClick={() => addAmount(d)}
+                className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-400"
+              >
+                +₱{d}
+              </button>
+            ))}
+          <button
+            onClick={setMax}
+            className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:border-zinc-400 dark:border-zinc-800 dark:text-zinc-400"
+          >
+            Max
+          </button>
+        </div>
       </div>
 
-      {preview && <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{preview}</p>}
+      {buyResult && (
+        <div className="mt-3 space-y-0.5 text-sm">
+          <p className="text-zinc-500">
+            ≈ {formatShares(buyResult.shares)} shares · moves to{" "}
+            {formatPercent(buyResult.pricesAfter[selected])}
+          </p>
+          <p>
+            <span className="text-zinc-500">To win</span>{" "}
+            <span className="font-semibold">{formatMoney(buyResult.shares)}</span>{" "}
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+              ▲ {Math.round(returnPct)}% return
+            </span>
+          </p>
+        </div>
+      )}
+      {sellResult && (
+        <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+          Receive {formatMoney(-sellResult.cost)} · moves to{" "}
+          {formatPercent(sellResult.pricesAfter[selected])}
+        </p>
+      )}
       {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
 
       <button

@@ -1,10 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
+import {
+  formatCompact,
+  formatDate,
+  formatMoney,
+  formatPercent,
+  formatShares,
+  isClosed,
+  nowMs,
+} from "@/lib/format";
 import { pricesN, probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
-import { getSessionUserId } from "@/lib/session";
+import { getCurrentUser } from "@/lib/session";
 import CategoricalResolvePanel from "@/components/CategoricalResolvePanel";
 import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
@@ -30,7 +38,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   });
   if (!market) notFound();
 
-  const userId = await getSessionUserId();
+  const currentUser = await getCurrentUser();
+  const userId = currentUser?.id ?? null;
   const positions = userId
     ? await prisma.position.findMany({
         where: { userId, marketId: id, shares: { gt: 1e-9 } },
@@ -123,6 +132,23 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               ? `closes ${formatDate(market.closesAt)}`
               : "closed, awaiting resolution"}
         </p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-zinc-500">
+          <span>
+            <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300">
+              {formatCompact(market.volume)}
+            </span>{" "}
+            volume
+          </span>
+          <span>
+            <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300">
+              {formatCompact(market.liquidityB)}
+            </span>{" "}
+            liquidity
+          </span>
+          <Link href={`/?category=${market.category}`} className="hover:underline">
+            {market.category}
+          </Link>
+        </div>
         {market.description && (
           <p className="mt-4 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">
             {market.description}
@@ -195,6 +221,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
             b={market.liquidityB}
             signedIn={!!userId}
+            balance={currentUser?.balance ?? 0}
             holdings={holdings}
           />
         ) : (
@@ -204,6 +231,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             qNo={market.qNo}
             b={market.liquidityB}
             signedIn={!!userId}
+            balance={currentUser?.balance ?? 0}
             yesShares={holdings["YES"] ?? 0}
             noShares={holdings["NO"] ?? 0}
           />
