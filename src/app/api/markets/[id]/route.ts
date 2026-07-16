@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { probYes } from "@/lib/lmsr";
+import { pricedOutcomes } from "@/lib/market";
 import { getSessionUserId } from "@/lib/session";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -9,6 +10,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     where: { id },
     include: {
       creator: { select: { username: true } },
+      outcomes: true,
       trades: {
         orderBy: { createdAt: "desc" },
         take: 50,
@@ -25,10 +27,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       })
     : [];
 
+  const isCat = market.kind === "CATEGORICAL";
+
   return NextResponse.json({
     id: market.id,
     question: market.question,
     description: market.description,
+    kind: market.kind,
     closesAt: market.closesAt,
     resolution: market.resolution,
     resolvedAt: market.resolvedAt,
@@ -38,7 +43,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     creator: market.creator.username,
     isCreator: userId === market.creatorId,
     createdAt: market.createdAt,
-    probYes: probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB }),
+    probYes: isCat ? undefined : probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB }),
+    outcomes: isCat
+      ? pricedOutcomes(market.outcomes, market.liquidityB).map((o) => ({
+          id: o.id,
+          label: o.label,
+          prob: o.price,
+        }))
+      : undefined,
     trades: market.trades.map((t) => ({
       id: t.id,
       username: t.user.username,

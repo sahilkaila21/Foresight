@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatMoney, formatPercent, formatShares } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
+import { pricedOutcomes } from "@/lib/market";
 import { getCurrentUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -12,63 +13,90 @@ const START_BALANCE = 1000;
 interface Row {
   marketId: string;
   question: string;
-  resolution: string | null;
-  probYes: number;
-  yesShares: number;
-  noShares: number;
-  cost: number; // net currency put in via trades (buys − sell proceeds)
-  value: number; // open: mark-to-market; resolved: payout received
+  resolved: boolean;
+  cost: number; // net currency put in (buys − sell proceeds)
+  value: number; // open: mark-to-market; resolved: payout
+  holdingsText: string; // e.g. "12.3 YES" or "5 Alice · 2 Bob"
+  headline: string; // resolution label or leading price
 }
 
 export default async function PortfolioPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
+  // Every trade the user made, with its market and (for categorical) outcomes.
   const trades = await prisma.trade.findMany({
     where: { userId: user.id },
-    include: { market: true },
+    include: { market: { include: { outcomes: true } } },
   });
-  const positions = await prisma.position.findMany({
-    where: { userId: user.id },
-  });
-  const held = new Map(positions.map((p) => [`${p.marketId}:${p.outcome}`, p.shares]));
 
-  // One row per market. Ledger sums give cost basis; for resolved markets the
-  // summed shares equal shares held at resolution (positions only change via trades).
-  const rows = new Map<string, Row>();
+  // Group by market: cost basis, and net shares per outcome key from the ledger.
+  // (Positions only change via trades, so ledger sums equal shares held — even
+  // for resolved markets, whose Position rows have been zeroed on payout.)
+  type Group = {
+    market: (typeof trades)[number]["market"];
+    cost: number;
+    shares: Map<string, number>;
+  };
+  const groups = new Map<string, Group>();
   for (const t of trades) {
-    let row = rows.get(t.marketId);
-    if (!row) {
-      const m = t.market;
-      row = {
-        marketId: m.id,
-        question: m.question,
-        resolution: m.resolution,
-        probYes: probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB }),
-        yesShares: 0,
-        noShares: 0,
-        cost: 0,
-        value: 0,
-      };
-      rows.set(t.marketId, row);
+    let g = groups.get(t.marketId);
+    if (!g) {
+      g = { market: t.market, cost: 0, shares: new Map() };
+      groups.set(t.marketId, g);
     }
-    row.cost += t.cost;
-    if (t.outcome === "YES") row.yesShares += t.shares;
-    else row.noShares += t.shares;
+    g.cost += t.cost;
+    g.shares.set(t.outcome, (g.shares.get(t.outcome) ?? 0) + t.shares);
   }
 
-  for (const row of rows.values()) {
-    if (row.resolution) {
-      row.value = row.resolution === "YES" ? row.yesShares : row.noShares;
+  const rows: Row[] = [];
+  for (const { market, cost, shares } of groups.values()) {
+    const isCat = market.kind === "CATEGORICAL";
+    const labelOf = (key: string) =>
+      isCat ? (market.outcomes.find((o) => o.id === key)?.label ?? key) : key;
+
+    // Price of each outcome key, for mark-to-market and the headline.
+    const priceOf = new Map<string, number>();
+    if (isCat) {
+      for (const o of pricedOutcomes(market.outcomes, market.liquidityB)) priceOf.set(o.id, o.price);
     } else {
-      row.yesShares = held.get(`${row.marketId}:YES`) ?? 0;
-      row.noShares = held.get(`${row.marketId}:NO`) ?? 0;
-      row.value = row.yesShares * row.probYes + row.noShares * (1 - row.probYes);
+      const p = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
+      priceOf.set("YES", p);
+      priceOf.set("NO", 1 - p);
     }
+
+    let value = 0;
+    if (market.resolution) {
+      value = shares.get(market.resolution) ?? 0; // winning shares pay ₱1 each
+    } else {
+      for (const [key, s] of shares) value += s * (priceOf.get(key) ?? 0);
+    }
+
+    const holdingsText =
+      [...shares.entries()]
+        .filter(([, s]) => s > 1e-9)
+        .map(([key, s]) => `${formatShares(s)} ${labelOf(key)}`)
+        .join(" · ") || "—";
+
+    const headline = market.resolution
+      ? `resolved “${labelOf(market.resolution)}”`
+      : isCat
+        ? "open"
+        : formatPercent(priceOf.get("YES") ?? 0);
+
+    rows.push({
+      marketId: market.id,
+      question: market.question,
+      resolved: !!market.resolution,
+      cost,
+      value,
+      holdingsText,
+      headline,
+    });
   }
 
-  const open = [...rows.values()].filter((r) => !r.resolution);
-  const resolved = [...rows.values()].filter((r) => r.resolution);
+  const open = rows.filter((r) => !r.resolved);
+  const resolved = rows.filter((r) => r.resolved);
   const portfolioValue = open.reduce((s, r) => s + r.value, 0);
   const netWorth = user.balance + portfolioValue;
 
@@ -149,15 +177,10 @@ function Section({
                       <Link href={`/markets/${r.marketId}`} className="hover:underline">
                         {r.question}
                       </Link>
-                      <span className="ml-2 font-mono text-xs text-zinc-500">
-                        {r.resolution ?? formatPercent(r.probYes)}
-                      </span>
+                      <span className="ml-2 font-mono text-xs text-zinc-500">{r.headline}</span>
                     </td>
                     <td className="py-2 pr-4 whitespace-nowrap text-zinc-600 dark:text-zinc-400">
-                      {r.yesShares > 1e-9 && `${formatShares(r.yesShares)} YES`}
-                      {r.yesShares > 1e-9 && r.noShares > 1e-9 && " · "}
-                      {r.noShares > 1e-9 && `${formatShares(r.noShares)} NO`}
-                      {r.yesShares <= 1e-9 && r.noShares <= 1e-9 && "—"}
+                      {r.holdingsText}
                     </td>
                     <td className="py-2 pr-4 text-right font-mono">{formatMoney(r.cost)}</td>
                     <td className="py-2 pr-4 text-right font-mono">{formatMoney(r.value)}</td>

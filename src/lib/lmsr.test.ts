@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   buy,
+  buyN,
   cost,
+  costN,
   costOfTrade,
+  costOfTradeN,
   maxSubsidy,
+  maxSubsidyN,
+  pricesN,
   probYes,
   sell,
+  sellN,
   sharesForSpend,
+  sharesForSpendN,
   type MarketState,
 } from "./lmsr";
 
@@ -99,5 +106,60 @@ describe("market maker subsidy bound", () => {
     }
     expect(owed - collected).toBeLessThanOrEqual(maxSubsidy(b) + 1e-6);
     expect(owed - collected).toBeGreaterThan(0.99 * maxSubsidy(b)); // nearly saturated
+  });
+});
+
+describe("N-outcome LMSR", () => {
+  it("prices are uniform for a fresh market and sum to 1", () => {
+    const prices = pricesN([0, 0, 0, 0], 100);
+    for (const p of prices) expect(p).toBeCloseTo(0.25, 12);
+    expect(prices.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+  });
+
+  it("prices always sum to 1 after trading", () => {
+    const { newQ } = buyN([0, 0, 0], 100, 1, 150);
+    const prices = pricesN(newQ, 100);
+    expect(prices.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+    expect(prices[1]).toBeGreaterThan(prices[0]); // bought outcome leads
+  });
+
+  it("matches the binary engine when N = 2", () => {
+    const b = 100;
+    const binary = buy({ qYes: 30, qNo: 10, b }, "YES", 25);
+    const nAry = buyN([30, 10], b, 0, 25);
+    expect(nAry.shares).toBeCloseTo(binary.shares, 9);
+    expect(nAry.pricesAfter[0]).toBeCloseTo(binary.probAfter, 9);
+    expect(costN([30, 10], b)).toBeCloseTo(cost({ qYes: 30, qNo: 10, b }), 9);
+  });
+
+  it("costOfTradeN(sharesForSpendN(s)) === s", () => {
+    const q = [40, 10, 25];
+    for (const amount of [1, 20, 300]) {
+      const shares = sharesForSpendN(q, 80, 2, amount);
+      expect(costOfTradeN(q, 80, 2, shares)).toBeCloseTo(amount, 8);
+    }
+  });
+
+  it("buy then sell the same shares is a no-op round trip", () => {
+    const q = [0, 0, 0, 0];
+    const bought = buyN(q, 100, 2, 60);
+    const sold = sellN(bought.newQ, 100, 2, bought.shares);
+    expect(-sold.cost).toBeCloseTo(60, 8);
+    for (const p of pricesN(sold.newQ, 100)) expect(p).toBeCloseTo(0.25, 9);
+  });
+
+  it("worst-case loss on N outcomes never exceeds b·ln(N)", () => {
+    const b = 100;
+    let q = [0, 0, 0, 0, 0];
+    let collected = 0;
+    let owed = 0;
+    for (let k = 0; k < 60; k++) {
+      const r = buyN(q, b, 3, 300);
+      collected += r.cost;
+      owed += r.shares;
+      q = r.newQ;
+    }
+    expect(owed - collected).toBeLessThanOrEqual(maxSubsidyN(b, 5) + 1e-6);
+    expect(owed - collected).toBeGreaterThan(0.99 * maxSubsidyN(b, 5));
   });
 });

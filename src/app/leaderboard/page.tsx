@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
+import { pricedOutcomes } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function LeaderboardPage() {
     include: {
       positions: {
         where: { shares: { gt: 1e-9 } },
-        include: { market: true },
+        include: { market: { include: { outcomes: true } } },
       },
       _count: { select: { trades: true } },
     },
@@ -19,15 +20,19 @@ export default async function LeaderboardPage() {
 
   const ranked = users
     .map((u) => {
-      // Mark open positions to market; resolved positions are already zeroed
+      // Mark open positions to market; resolved positions are already zeroed.
       const positionValue = u.positions.reduce((sum, pos) => {
-        if (pos.market.resolution) return sum;
-        const p = probYes({
-          qYes: pos.market.qYes,
-          qNo: pos.market.qNo,
-          b: pos.market.liquidityB,
-        });
-        return sum + pos.shares * (pos.outcome === "YES" ? p : 1 - p);
+        const m = pos.market;
+        if (m.resolution) return sum;
+        let price: number;
+        if (m.kind === "CATEGORICAL") {
+          const priced = pricedOutcomes(m.outcomes, m.liquidityB);
+          price = priced.find((o) => o.id === pos.outcome)?.price ?? 0;
+        } else {
+          const p = probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB });
+          price = pos.outcome === "YES" ? p : 1 - p;
+        }
+        return sum + pos.shares * price;
       }, 0);
       const netWorth = u.balance + positionValue;
       return {

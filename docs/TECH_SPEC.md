@@ -114,11 +114,20 @@ Validation errors return `400 {error}`, auth failures `401`, ownership failures 
 - API route logic kept thin; money-moving code paths all inside Prisma transactions.
 - `npm run build` + `npm test` are the CI gate.
 
-## 8. Roadmap (post-v1)
+## 8. Roadmap
 
-1. Multi-outcome (categorical) markets — LMSR generalizes directly.
-2. Probability history charts, comments, and market search/tags.
-3. Leaderboards, profit/loss tracking, portfolio page.
-4. Admin/oracle resolution + dispute flow (replace creator-resolves trust model).
-5. Loans/daily bonuses to keep play-money economy liquid.
-6. Postgres + hosting (Vercel/Fly), rate limiting, audit log.
+**Shipped since v1**
+- ✅ Probability history chart, portfolio with P/L, leaderboard.
+- ✅ Market search, status filters, sorting; comments.
+- ✅ Multi-outcome (categorical) markets — the LMSR engine is generalized to N
+  outcomes (`costN`/`pricesN`/`sharesForSpendN`/`buyN`/`sellN`), with binary as
+  the two-outcome special case. Added alongside binary via a `Market.kind` flag
+  and an `Outcome` table; `Trade`/`Position.outcome` holds `"YES"/"NO"` for
+  binary and the `Outcome` id for categorical, so those tables were unchanged.
+  Worst-case maker subsidy generalizes to `b · ln(N)`.
+
+**Still ahead**
+- Categorical probability-history chart (binary chart is single-line today).
+- Admin/oracle resolution + dispute flow (replace creator-resolves trust model).
+- Loans/daily bonuses to keep the play-money economy liquid.
+- Market tags/categories; Postgres + hosting (Vercel/Fly), rate limiting, audit log.

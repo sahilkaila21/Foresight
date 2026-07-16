@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { formatDate, formatPercent, isClosed, nowMs } from "@/lib/format";
-import { probYes } from "@/lib/lmsr";
+import { marketHeadline } from "@/lib/market";
 import MarketFilters from "@/components/MarketFilters";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +36,7 @@ export default async function HomePage({
     orderBy,
     include: {
       creator: { select: { username: true } },
+      outcomes: true,
       _count: { select: { trades: true } },
     },
   });
@@ -63,8 +64,21 @@ export default async function HomePage({
       ) : (
         <ul className="space-y-3">
           {markets.map((m) => {
-            const p = probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB });
             const closed = isClosed(m.closesAt);
+            const isCat = m.kind === "CATEGORICAL";
+            const headline = marketHeadline(m);
+            const resolvedLabel = m.resolution
+              ? isCat
+                ? (m.outcomes.find((o) => o.id === m.resolution)?.label ?? m.resolution)
+                : m.resolution
+              : null;
+            // Losing binary resolution shows red; every other resolved badge (a
+            // winning outcome) shows green; unresolved shows neutral.
+            const badgeColor = !m.resolution
+              ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              : m.resolution === "NO"
+                ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400"
+                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
             return (
               <li key={m.id}>
                 <Link
@@ -75,23 +89,25 @@ export default async function HomePage({
                     <p className="truncate font-medium">{m.question}</p>
                     <p className="mt-1 text-xs text-zinc-500">
                       by @{m.creator.username} · {m._count.trades} trades ·{" "}
+                      {isCat && `${m.outcomes.length} outcomes · `}
                       {m.resolution
-                        ? `resolved ${m.resolution}`
+                        ? "resolved"
                         : closed
                           ? "closed, awaiting resolution"
                           : `closes ${formatDate(m.closesAt)}`}
                     </p>
+                    {isCat && !m.resolution && headline.label !== "—" && (
+                      <p className="mt-0.5 truncate text-xs text-zinc-400">
+                        “{headline.label}” leading
+                      </p>
+                    )}
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-3 py-1 font-mono text-sm font-bold ${
-                      m.resolution === "YES"
-                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                        : m.resolution === "NO"
-                          ? "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400"
-                          : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                    className={`max-w-[8rem] shrink-0 truncate rounded-full px-3 py-1 text-sm font-bold ${badgeColor} ${
+                      resolvedLabel ? "" : "font-mono"
                     }`}
                   >
-                    {m.resolution ?? formatPercent(p)}
+                    {resolvedLabel ?? formatPercent(headline.prob)}
                   </span>
                 </Link>
               </li>

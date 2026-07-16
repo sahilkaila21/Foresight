@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { probYes } from "@/lib/lmsr";
+import { marketHeadline, pricedOutcomes } from "@/lib/market";
 import { getCurrentUser } from "@/lib/session";
 
 export async function GET() {
@@ -8,23 +9,41 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     include: {
       creator: { select: { username: true } },
+      outcomes: true,
       _count: { select: { trades: true } },
     },
   });
 
   return NextResponse.json(
-    markets.map((m) => ({
-      id: m.id,
-      question: m.question,
-      description: m.description,
-      closesAt: m.closesAt,
-      resolution: m.resolution,
-      resolvedAt: m.resolvedAt,
-      creator: m.creator.username,
-      createdAt: m.createdAt,
-      tradeCount: m._count.trades,
-      probYes: probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB }),
-    }))
+    markets.map((m) => {
+      const headline = marketHeadline(m);
+      return {
+        id: m.id,
+        question: m.question,
+        description: m.description,
+        kind: m.kind,
+        closesAt: m.closesAt,
+        resolution: m.resolution,
+        resolvedAt: m.resolvedAt,
+        creator: m.creator.username,
+        createdAt: m.createdAt,
+        tradeCount: m._count.trades,
+        // Binary: chance of YES. Categorical: leading outcome + all prices.
+        probYes:
+          m.kind === "CATEGORICAL"
+            ? undefined
+            : probYes({ qYes: m.qYes, qNo: m.qNo, b: m.liquidityB }),
+        leading: m.kind === "CATEGORICAL" ? { label: headline.label, prob: headline.prob } : undefined,
+        outcomes:
+          m.kind === "CATEGORICAL"
+            ? pricedOutcomes(m.outcomes, m.liquidityB).map((o) => ({
+                id: o.id,
+                label: o.label,
+                prob: o.price,
+              }))
+            : undefined,
+      };
+    })
   );
 }
 
@@ -36,6 +55,7 @@ export async function POST(req: Request) {
   const question = typeof body?.question === "string" ? body.question.trim() : "";
   const description = typeof body?.description === "string" ? body.description.trim() : "";
   const closesAt = new Date(body?.closesAt ?? NaN);
+  const kind = body?.kind === "CATEGORICAL" ? "CATEGORICAL" : "BINARY";
 
   if (question.length < 10 || question.length > 200) {
     return NextResponse.json({ error: "Question must be 10-200 characters" }, { status: 400 });
@@ -44,8 +64,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Close date must be in the future" }, { status: 400 });
   }
 
+  // Categorical markets need 2-10 distinct, non-empty outcome labels.
+  let labels: string[] = [];
+  if (kind === "CATEGORICAL") {
+    labels = Array.isArray(body?.outcomes)
+      ? body.outcomes.map((o: unknown) => (typeof o === "string" ? o.trim() : "")).filter(Boolean)
+      : [];
+    if (labels.length < 2 || labels.length > 10) {
+      return NextResponse.json(
+        { error: "Categorical markets need between 2 and 10 outcomes" },
+        { status: 400 }
+      );
+    }
+    if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) {
+      return NextResponse.json({ error: "Outcome labels must be unique" }, { status: 400 });
+    }
+    if (labels.some((l) => l.length > 60)) {
+      return NextResponse.json({ error: "Outcome labels must be under 60 characters" }, { status: 400 });
+    }
+  }
+
   const market = await prisma.market.create({
-    data: { question, description, closesAt, creatorId: user.id },
+    data: {
+      question,
+      description,
+      closesAt,
+      kind,
+      creatorId: user.id,
+      outcomes:
+        kind === "CATEGORICAL"
+          ? { create: labels.map((label, i) => ({ label, sortOrder: i })) }
+          : undefined,
+    },
   });
   return NextResponse.json(market, { status: 201 });
 }

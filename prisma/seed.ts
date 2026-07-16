@@ -1,51 +1,88 @@
 /**
- * Seed demo data: two users (alice / bob, password "password123")
- * and a few markets with trades executed through the real LMSR engine
- * so quantities, balances, positions, and the trade ledger stay consistent.
+ * Seed demo data: two users (alice / bob, password "password123") and a few
+ * markets — binary and categorical — with trades executed through the real
+ * LMSR engine so quantities, balances, positions, and the ledger stay
+ * consistent. Wipes market data first so it can be re-run safely.
  *
  * Run with: npm run db:seed
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { buy, probYes, type Outcome } from "../src/lib/lmsr";
+import { buy, buyN, pricesN, probYes, type Outcome } from "../src/lib/lmsr";
 
 const prisma = new PrismaClient();
 
-async function trade(userId: string, marketId: string, outcome: Outcome, spend: number) {
+async function tradeBinary(userId: string, marketId: string, outcome: Outcome, spend: number) {
   const market = await prisma.market.findUniqueOrThrow({ where: { id: marketId } });
-  const result = buy({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB }, outcome, spend);
-
+  const r = buy({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB }, outcome, spend);
   await prisma.$transaction([
     prisma.market.update({
       where: { id: marketId },
-      data: { qYes: result.newState.qYes, qNo: result.newState.qNo },
+      data: { qYes: r.newState.qYes, qNo: r.newState.qNo },
     }),
     prisma.user.update({ where: { id: userId }, data: { balance: { decrement: spend } } }),
     prisma.position.upsert({
       where: { userId_marketId_outcome: { userId, marketId, outcome } },
-      create: { userId, marketId, outcome, shares: result.shares },
-      update: { shares: { increment: result.shares } },
+      create: { userId, marketId, outcome, shares: r.shares },
+      update: { shares: { increment: r.shares } },
     }),
     prisma.trade.create({
-      data: { marketId, userId, outcome, shares: result.shares, cost: spend, probAfter: result.probAfter },
+      data: { marketId, userId, outcome, shares: r.shares, cost: spend, probAfter: r.probAfter },
+    }),
+  ]);
+}
+
+async function tradeCategorical(userId: string, marketId: string, outcomeIdx: number, spend: number) {
+  const market = await prisma.market.findUniqueOrThrow({
+    where: { id: marketId },
+    include: { outcomes: true },
+  });
+  const sorted = [...market.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
+  const q = sorted.map((o) => o.q);
+  const r = buyN(q, market.liquidityB, outcomeIdx, spend);
+  const outcome = sorted[outcomeIdx].id;
+  await prisma.$transaction([
+    prisma.outcome.update({ where: { id: outcome }, data: { q: r.newQ[outcomeIdx] } }),
+    prisma.user.update({ where: { id: userId }, data: { balance: { decrement: spend } } }),
+    prisma.position.upsert({
+      where: { userId_marketId_outcome: { userId, marketId, outcome } },
+      create: { userId, marketId, outcome, shares: r.shares },
+      update: { shares: { increment: r.shares } },
+    }),
+    prisma.trade.create({
+      data: {
+        marketId,
+        userId,
+        outcome,
+        shares: r.shares,
+        cost: spend,
+        probAfter: r.pricesAfter[outcomeIdx],
+      },
     }),
   ]);
 }
 
 async function main() {
+  // Clean slate for market data (users are upserted and their balances reset).
+  await prisma.comment.deleteMany();
+  await prisma.trade.deleteMany();
+  await prisma.position.deleteMany();
+  await prisma.outcome.deleteMany();
+  await prisma.market.deleteMany();
+
   const passwordHash = await bcrypt.hash("password123", 10);
   const alice = await prisma.user.upsert({
     where: { username: "alice" },
-    update: {},
+    update: { balance: 1000 },
     create: { username: "alice", passwordHash },
   });
   const bob = await prisma.user.upsert({
     where: { username: "bob" },
-    update: {},
+    update: { balance: 1000 },
     create: { username: "bob", passwordHash },
   });
 
-  const markets = await Promise.all(
+  const binaries = await Promise.all(
     [
       {
         question: "Will SpaceX land Starship on Mars by end of 2028?",
@@ -66,20 +103,47 @@ async function main() {
     ].map((m) => prisma.market.create({ data: { ...m, creatorId: alice.id } }))
   );
 
-  // A few opinionated trades to move prices off 50%
-  await trade(alice.id, markets[0].id, "NO", 120);
-  await trade(bob.id, markets[0].id, "YES", 40);
-  await trade(bob.id, markets[1].id, "YES", 90);
-  await trade(alice.id, markets[1].id, "YES", 30);
-  await trade(bob.id, markets[2].id, "NO", 60);
+  await tradeBinary(alice.id, binaries[0].id, "NO", 120);
+  await tradeBinary(bob.id, binaries[0].id, "YES", 40);
+  await tradeBinary(bob.id, binaries[1].id, "YES", 90);
+  await tradeBinary(alice.id, binaries[1].id, "YES", 30);
+  await tradeBinary(bob.id, binaries[2].id, "NO", 60);
 
-  for (const m of markets) {
-    const fresh = await prisma.market.findUniqueOrThrow({ where: { id: m.id } });
+  // A categorical (multiple-choice) market.
+  const labels = ["Democrat", "Republican", "Independent"];
+  const election = await prisma.market.create({
+    data: {
+      question: "Which party wins the 2028 US presidential election?",
+      description: "Resolves to the party of the winning candidate per certified electoral results.",
+      kind: "CATEGORICAL",
+      closesAt: new Date("2028-11-07T23:59:00Z"),
+      creatorId: alice.id,
+      outcomes: { create: labels.map((label, i) => ({ label, sortOrder: i })) },
+    },
+  });
+  await tradeCategorical(bob.id, election.id, 0, 80); // Democrat
+  await tradeCategorical(alice.id, election.id, 1, 110); // Republican
+  await tradeCategorical(bob.id, election.id, 2, 15); // Independent
+
+  for (const m of binaries) {
+    const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id } });
     console.log(
-      `  ${fresh.question} → ${Math.round(probYes({ qYes: fresh.qYes, qNo: fresh.qNo, b: fresh.liquidityB }) * 100)}% YES`
+      `  ${f.question} → ${Math.round(probYes({ qYes: f.qYes, qNo: f.qNo, b: f.liquidityB }) * 100)}% YES`
     );
   }
-  console.log("Seeded: users alice & bob (password 'password123'), 3 markets, 5 trades.");
+  const e = await prisma.market.findUniqueOrThrow({
+    where: { id: election.id },
+    include: { outcomes: true },
+  });
+  const sorted = [...e.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
+  const prices = pricesN(
+    sorted.map((o) => o.q),
+    e.liquidityB
+  );
+  console.log(
+    `  ${e.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
+  );
+  console.log("Seeded: alice & bob (password 'password123'), 3 binary + 1 categorical market.");
 }
 
 main()

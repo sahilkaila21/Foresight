@@ -2,7 +2,10 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { formatDate, formatMoney, formatPercent, formatShares, isClosed, nowMs } from "@/lib/format";
 import { probYes } from "@/lib/lmsr";
+import { pricedOutcomes } from "@/lib/market";
 import { getSessionUserId } from "@/lib/session";
+import CategoricalResolvePanel from "@/components/CategoricalResolvePanel";
+import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
 import ProbChart from "@/components/ProbChart";
 import ResolvePanel from "@/components/ResolvePanel";
@@ -16,6 +19,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     where: { id },
     include: {
       creator: { select: { username: true } },
+      outcomes: true,
       trades: {
         orderBy: { createdAt: "asc" },
         include: { user: { select: { username: true } } },
@@ -37,44 +41,53 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     include: { user: { select: { username: true } } },
   });
 
-  const p = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
-  const open = !market.resolution && !isClosed(market.closesAt);
+  const isCategorical = market.kind === "CATEGORICAL";
+  const priced = isCategorical ? pricedOutcomes(market.outcomes, market.liquidityB) : [];
+  // outcome key ("YES"/"NO" or Outcome id) -> human label
+  const labelOf = (key: string) =>
+    isCategorical ? (market.outcomes.find((o) => o.id === key)?.label ?? key) : key;
 
-  // Step-line history: 50% at creation, one point per trade, flat to "now"
+  const open = !market.resolution && !isClosed(market.closesAt);
+  const yesProb = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
+
+  // Binary probability history (categorical charting is left for a later pass)
   const endT = market.resolvedAt?.getTime() ?? nowMs();
   const chartPoints = [
     { t: market.createdAt.getTime(), p: 0.5 },
     ...market.trades.map((t) => ({ t: t.createdAt.getTime(), p: t.probAfter })),
-    { t: endT, p },
+    { t: endT, p: yesProb },
   ];
   const recentTrades = market.trades.slice(-30).reverse();
+  const holdings = Object.fromEntries(positions.map((p) => [p.outcome, p.shares]));
 
   return (
     <div className="space-y-8">
       <div>
         <div className="flex items-start justify-between gap-6">
           <h1 className="text-2xl font-bold">{market.question}</h1>
-          <div className="text-right">
-            <div
-              className={`font-mono text-4xl font-bold ${
-                market.resolution === "YES"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : market.resolution === "NO"
-                    ? "text-rose-600 dark:text-rose-400"
-                    : ""
-              }`}
-            >
-              {market.resolution ?? formatPercent(p)}
+          {!isCategorical && (
+            <div className="text-right">
+              <div
+                className={`font-mono text-4xl font-bold ${
+                  market.resolution === "YES"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : market.resolution === "NO"
+                      ? "text-rose-600 dark:text-rose-400"
+                      : ""
+                }`}
+              >
+                {market.resolution ?? formatPercent(yesProb)}
+              </div>
+              <div className="text-xs text-zinc-500">
+                {market.resolution ? "resolved" : "chance of YES"}
+              </div>
             </div>
-            <div className="text-xs text-zinc-500">
-              {market.resolution ? "resolved" : "chance of YES"}
-            </div>
-          </div>
+          )}
         </div>
         <p className="mt-2 text-sm text-zinc-500">
           by @{market.creator.username} ·{" "}
           {market.resolution
-            ? `resolved ${market.resolution} on ${formatDate(market.resolvedAt!)}`
+            ? `resolved "${labelOf(market.resolution)}" on ${formatDate(market.resolvedAt!)}`
             : open
               ? `closes ${formatDate(market.closesAt)}`
               : "closed, awaiting resolution"}
@@ -86,10 +99,44 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         )}
       </div>
 
-      {market.trades.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <ProbChart points={chartPoints} />
+      {isCategorical ? (
+        <div className="space-y-2">
+          {priced.map((o) => {
+            const won = market.resolution === o.id;
+            return (
+              <div
+                key={o.id}
+                className={`rounded-lg border p-3 ${
+                  won
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
+                    : "border-zinc-200 dark:border-zinc-800"
+                }`}
+              >
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    {o.label}
+                    {won && " ✓"}
+                  </span>
+                  <span className="font-mono text-zinc-600 dark:text-zinc-400">
+                    {formatPercent(o.price)}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                  <div
+                    className={won ? "h-full bg-emerald-500" : "h-full bg-indigo-500"}
+                    style={{ width: `${Math.max(o.price * 100, 1)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
+      ) : (
+        market.trades.length > 0 && (
+          <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <ProbChart points={chartPoints} />
+          </div>
+        )
       )}
 
       {positions.length > 0 && (
@@ -97,28 +144,44 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           <h2 className="mb-2 font-semibold">Your position</h2>
           {positions.map((pos) => (
             <p key={pos.id} className="text-zinc-600 dark:text-zinc-400">
-              {formatShares(pos.shares)} {pos.outcome} shares — pays{" "}
-              {formatMoney(pos.shares)} if {pos.outcome}
+              {formatShares(pos.shares)} shares of &ldquo;{labelOf(pos.outcome)}&rdquo; — pays{" "}
+              {formatMoney(pos.shares)} if it wins
             </p>
           ))}
         </div>
       )}
 
-      {open && (
-        <TradePanel
-          marketId={market.id}
-          qYes={market.qYes}
-          qNo={market.qNo}
-          b={market.liquidityB}
-          signedIn={!!userId}
-          yesShares={positions.find((x) => x.outcome === "YES")?.shares ?? 0}
-          noShares={positions.find((x) => x.outcome === "NO")?.shares ?? 0}
-        />
-      )}
+      {open &&
+        (isCategorical ? (
+          <CategoricalTradePanel
+            marketId={market.id}
+            outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
+            b={market.liquidityB}
+            signedIn={!!userId}
+            holdings={holdings}
+          />
+        ) : (
+          <TradePanel
+            marketId={market.id}
+            qYes={market.qYes}
+            qNo={market.qNo}
+            b={market.liquidityB}
+            signedIn={!!userId}
+            yesShares={holdings["YES"] ?? 0}
+            noShares={holdings["NO"] ?? 0}
+          />
+        ))}
 
-      {!market.resolution && userId === market.creatorId && (
-        <ResolvePanel marketId={market.id} />
-      )}
+      {!market.resolution &&
+        userId === market.creatorId &&
+        (isCategorical ? (
+          <CategoricalResolvePanel
+            marketId={market.id}
+            outcomes={priced.map((o) => ({ id: o.id, label: o.label }))}
+          />
+        ) : (
+          <ResolvePanel marketId={market.id} />
+        ))}
 
       <div>
         <h2 className="mb-3 font-semibold">Recent trades</h2>
@@ -126,30 +189,30 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           <p className="text-sm text-zinc-500">No trades yet. Be the first.</p>
         ) : (
           <ul className="space-y-1 text-sm">
-            {recentTrades.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
-              >
-                <span>
-                  <span className="font-medium">@{t.user.username}</span>{" "}
-                  {t.shares >= 0 ? "bought" : "sold"} {formatShares(Math.abs(t.shares))}{" "}
-                  <span
-                    className={
-                      t.outcome === "YES"
-                        ? "font-semibold text-emerald-600 dark:text-emerald-400"
-                        : "font-semibold text-rose-600 dark:text-rose-400"
-                    }
-                  >
-                    {t.outcome}
-                  </span>{" "}
-                  for {formatMoney(Math.abs(t.cost))}
-                </span>
-                <span className="font-mono text-xs text-zinc-500">
-                  → {formatPercent(t.probAfter)}
-                </span>
-              </li>
-            ))}
+            {recentTrades.map((t) => {
+              const yesNoColor =
+                t.outcome === "YES"
+                  ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                  : t.outcome === "NO"
+                    ? "font-semibold text-rose-600 dark:text-rose-400"
+                    : "font-semibold text-indigo-600 dark:text-indigo-400";
+              return (
+                <li
+                  key={t.id}
+                  className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
+                >
+                  <span>
+                    <span className="font-medium">@{t.user.username}</span>{" "}
+                    {t.shares >= 0 ? "bought" : "sold"} {formatShares(Math.abs(t.shares))}{" "}
+                    <span className={yesNoColor}>{labelOf(t.outcome)}</span> for{" "}
+                    {formatMoney(Math.abs(t.cost))}
+                  </span>
+                  <span className="font-mono text-xs text-zinc-500">
+                    → {formatPercent(t.probAfter)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

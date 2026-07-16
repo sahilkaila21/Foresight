@@ -103,3 +103,91 @@ export function sell(state: MarketState, outcome: Outcome, shares: number): Trad
 export function maxSubsidy(b: number): number {
   return b * Math.LN2;
 }
+
+// ---------------------------------------------------------------------------
+// Categorical (N-outcome) LMSR
+//
+// Same rule generalized to any number of mutually exclusive outcomes. State is
+// an array of share quantities q[] plus b. Cost C(q) = b·ln(Σ e^(q_j/b));
+// price of outcome i is the softmax e^(q_i/b) / Σ e^(q_j/b). Buying outcome i
+// changes only q_i. The binary functions above are the two-outcome special
+// case (q = [qYes, qNo]) and stay in use for existing binary markets.
+// ---------------------------------------------------------------------------
+
+/** ln(Σ e^(x_j)) computed stably over an array. */
+export function logSumExpArr(xs: number[]): number {
+  const m = Math.max(...xs);
+  if (!Number.isFinite(m)) return m;
+  let sum = 0;
+  for (const x of xs) sum += Math.exp(x - m);
+  return m + Math.log(sum);
+}
+
+/** LMSR cost C(q) for an N-outcome market. */
+export function costN(q: number[], b: number): number {
+  return b * logSumExpArr(q.map((x) => x / b));
+}
+
+/** Prices (probabilities) for every outcome; sums to 1. */
+export function pricesN(q: number[], b: number): number[] {
+  const scaled = q.map((x) => x / b);
+  const lse = logSumExpArr(scaled);
+  return scaled.map((s) => Math.exp(s - lse));
+}
+
+/** Cost of trading `shares` of outcome `i` (positive = buy, negative = sell). */
+export function costOfTradeN(q: number[], b: number, i: number, shares: number): number {
+  const after = q.slice();
+  after[i] += shares;
+  return costN(after, b) - costN(q, b);
+}
+
+/**
+ * Shares of outcome `i` a spend of `amount` buys (closed form).
+ *
+ * Solving C(q + d·e_i) − C(q) = amount gives
+ *   d = b·[ ln(e^(amount/b)·S − R) − q_i/b ],  S = Σ e^(q_j/b),  R = S − e^(q_i/b)
+ * evaluated in log space for stability.
+ */
+export function sharesForSpendN(q: number[], b: number, i: number, amount: number): number {
+  if (amount <= 0) return 0;
+  const scaled = q.map((x) => x / b);
+  const si = scaled[i];
+  const lse = logSumExpArr(scaled); // ln S
+  const others = scaled.filter((_, j) => j !== i);
+  const lnR = others.length ? logSumExpArr(others) : -Infinity; // ln R
+  const A = amount / b + lse; // ln(e^(amount/b)·S)
+  // ln(e^A − R): with a single outcome R = 0, so this is just A.
+  const lnDiff = lnR === -Infinity ? A : A + Math.log1p(-Math.exp(lnR - A));
+  return b * (lnDiff - si);
+}
+
+export interface TradeResultN {
+  shares: number;
+  cost: number;
+  newQ: number[];
+  pricesAfter: number[];
+}
+
+/** Buy shares of outcome `i` by spending `amount`. */
+export function buyN(q: number[], b: number, i: number, amount: number): TradeResultN {
+  if (!(amount > 0)) throw new Error("Spend amount must be positive");
+  const shares = sharesForSpendN(q, b, i, amount);
+  const newQ = q.slice();
+  newQ[i] += shares;
+  return { shares, cost: amount, newQ, pricesAfter: pricesN(newQ, b) };
+}
+
+/** Sell `shares` of outcome `i`, receiving currency back. */
+export function sellN(q: number[], b: number, i: number, shares: number): TradeResultN {
+  if (!(shares > 0)) throw new Error("Shares to sell must be positive");
+  const proceeds = -costOfTradeN(q, b, i, -shares);
+  const newQ = q.slice();
+  newQ[i] -= shares;
+  return { shares: -shares, cost: -proceeds, newQ, pricesAfter: pricesN(newQ, b) };
+}
+
+/** Max subsidy for an N-outcome market: b·ln(N). */
+export function maxSubsidyN(b: number, n: number): number {
+  return b * Math.log(n);
+}

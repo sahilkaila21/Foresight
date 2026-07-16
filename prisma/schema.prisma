@@ -23,11 +23,12 @@ model Market {
   id          String     @id @default(cuid())
   question    String
   description String     @default("")
+  kind        String     @default("BINARY") // "BINARY" | "CATEGORICAL"
   closesAt    DateTime
   liquidityB  Float      @default(100)
-  qYes        Float      @default(0)
-  qNo         Float      @default(0)
-  resolution  String? // "YES" | "NO"
+  qYes        Float      @default(0) // binary only
+  qNo         Float      @default(0) // binary only
+  resolution  String? // binary: "YES"|"NO"; categorical: winning Outcome id
   resolvedAt  DateTime?
   creatorId   String
   creator     User       @relation(fields: [creatorId], references: [id])
@@ -35,6 +36,22 @@ model Market {
   trades      Trade[]
   positions   Position[]
   comments    Comment[]
+  outcomes    Outcome[]
+}
+
+// Categorical-market outcomes. Each holds its own LMSR share quantity `q`.
+// For categorical markets, Trade.outcome and Position.outcome store the
+// Outcome id; for binary markets those fields hold "YES"/"NO" and no
+// Outcome rows exist.
+model Outcome {
+  id        String @id @default(cuid())
+  marketId  String
+  market    Market @relation(fields: [marketId], references: [id])
+  label     String
+  q         Float  @default(0)
+  sortOrder Int    @default(0)
+
+  @@index([marketId, sortOrder])
 }
 
 model Trade {
