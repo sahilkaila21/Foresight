@@ -12,17 +12,17 @@ export default async function NavBar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
-      <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+      <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap sm:gap-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-2xl font-extrabold tracking-tight">
           <span className="text-3xl">🔮</span>
           <span className="hidden text-xl sm:inline">Foresight</span>
         </Link>
 
-        <div className="flex-1">
+        <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
           <SearchBox />
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 text-sm">
+        <div className="ml-auto flex shrink-0 items-center gap-2.5 text-sm sm:ml-0 sm:gap-3">
           <ThemeToggle />
           <HowToUse />
           {user ? (

@@ -90,7 +90,7 @@ export default function HowToUse() {
         className="flex shrink-0 items-center gap-1.5 rounded-full bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
       >
         <span aria-hidden>💡</span>
-        <span>How to use?</span>
+        <span className="hidden sm:inline">How to use?</span>
       </button>
 
       {open &&
