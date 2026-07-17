@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { formatMoney } from "@/lib/format";
 import LogoutButton from "./LogoutButton";
 import CategoryTabs from "./CategoryTabs";
+import HowToUse from "./HowToUse";
 import SearchBox from "./SearchBox";
 
 export default async function NavBar() {
@@ -21,6 +22,7 @@ export default async function NavBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3 text-sm">
+          <HowToUse />
           {user ? (
             <>
               <Link
