@@ -14,8 +14,12 @@ import { pricesN, probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
 import { marketPhase } from "@/lib/resolution";
 import { getCurrentUser } from "@/lib/session";
+import { teamMeta } from "@/lib/teams";
 import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
+import MatchChart from "@/components/MatchChart";
+import MatchHeader from "@/components/MatchHeader";
+import MatchTradePanel from "@/components/MatchTradePanel";
 import MultiProbChart, { type Series } from "@/components/MultiProbChart";
 import ProbChart from "@/components/ProbChart";
 import ResolutionPanel from "@/components/ResolutionPanel";
@@ -54,6 +58,9 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
   const isCategorical = market.kind === "CATEGORICAL";
   const priced = isCategorical ? pricedOutcomes(market.outcomes, market.liquidityB) : [];
+  // A two-team World Cup market gets the dedicated match layout (flags, match
+  // chart, right-hand trade box); everything else uses the standard layout.
+  const isMatch = isCategorical && market.category === "World Cup" && priced.length === 2;
   // outcome key ("YES"/"NO" or Outcome id) -> human label
   const labelOf = (key: string) =>
     isCategorical ? (market.outcomes.find((o) => o.id === key)?.label ?? key) : key;
@@ -126,6 +133,150 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const recentTrades = market.trades.slice(-30).reverse();
   const holdings = Object.fromEntries(positions.map((p) => [p.outcome, p.shares]));
 
+  // Match series = categorical history colored by team.
+  const matchSeries = catSeries.map((s) => ({ ...s, color: teamMeta(s.label).color }));
+
+  // ----- Shared blocks reused by both the match and standard layouts -----
+  const positionBlock = positions.length > 0 && (
+    <div className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
+      <h2 className="mb-2 font-semibold">Your position</h2>
+      {positions.map((pos) => (
+        <p key={pos.id} className="text-zinc-600 dark:text-zinc-400">
+          {formatShares(pos.shares)} shares of &ldquo;{labelOf(pos.outcome)}&rdquo; — pays{" "}
+          {formatMoney(pos.shares)} if it wins
+        </p>
+      ))}
+    </div>
+  );
+
+  const resolutionBlock = (
+    <ResolutionPanel
+      marketId={market.id}
+      phase={phase}
+      options={resolutionOptions}
+      signedIn={!!userId}
+      isAdmin={!!currentUser?.isAdmin}
+      isProposer={!!userId && userId === market.proposedById}
+      proposedLabel={market.proposedOutcome ? labelOf(market.proposedOutcome) : null}
+      proposedBy={usernameOf(market.proposedById)}
+      disputedBy={usernameOf(market.disputedById)}
+      challengeUntil={market.challengeUntil?.toISOString() ?? null}
+    />
+  );
+
+  const recentTradesBlock = (
+    <div>
+      <h2 className="mb-3 font-semibold">Recent trades</h2>
+      {recentTrades.length === 0 ? (
+        <p className="text-sm text-zinc-500">No trades yet. Be the first.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {recentTrades.map((t) => {
+            const yesNoColor =
+              t.outcome === "YES"
+                ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                : t.outcome === "NO"
+                  ? "font-semibold text-rose-600 dark:text-rose-400"
+                  : "font-semibold text-indigo-600 dark:text-indigo-400";
+            return (
+              <li
+                key={t.id}
+                className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
+              >
+                <span>
+                  <Link href={`/users/${t.user.username}`} className="font-medium hover:underline">
+                    @{t.user.username}
+                  </Link>{" "}
+                  {t.shares >= 0 ? "bought" : "sold"} {formatShares(Math.abs(t.shares))}{" "}
+                  <span className={yesNoColor}>{labelOf(t.outcome)}</span> for{" "}
+                  {formatMoney(Math.abs(t.cost))}
+                </span>
+                <span className="font-mono text-xs text-zinc-500">
+                  → {formatPercent(t.probAfter)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+
+  const commentsBlock = (
+    <CommentSection
+      marketId={market.id}
+      signedIn={!!userId}
+      initial={comments.map((c) => ({
+        id: c.id,
+        username: c.user.username,
+        body: c.body,
+        createdAt: c.createdAt.toISOString(),
+      }))}
+    />
+  );
+
+  // ----- Match layout: flags, two-line chart, right-hand sticky trade box -----
+  if (isMatch) {
+    const teamA = priced[0].label;
+    const teamB = priced[1].label;
+    return (
+      // Three grid children so, on mobile, the trade box sits right under the
+      // chart (DOM order); on desktop, `order` puts the chart top-left, the
+      // trade box top-right (sticky sidebar), and the details below the chart.
+      <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:order-1 lg:col-span-2">
+          <div>
+            <p className="text-xs font-medium text-zinc-500">Sports · World Cup</p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight">
+              {teamA} <span className="text-zinc-400">–</span> {teamB}
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">{phaseLabel[phase]}</p>
+          </div>
+
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            <MatchHeader teamA={teamA} teamB={teamB} kickoff={market.closesAt} />
+            {matchSeries.length > 0 && (
+              <div className="border-t border-zinc-100 p-4 dark:border-zinc-900">
+                <MatchChart series={matchSeries} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:order-2 lg:col-span-1">
+          <div className="lg:sticky lg:top-28">
+            {open ? (
+              <MatchTradePanel
+                marketId={market.id}
+                outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
+                b={market.liquidityB}
+                signedIn={!!userId}
+                balance={currentUser?.balance ?? 0}
+                holdings={holdings}
+              />
+            ) : (
+              <div className="rounded-2xl border border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800">
+                Trading is closed — {phaseLabel[phase]}.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6 lg:order-3 lg:col-span-2">
+          {market.description && (
+            <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">
+              {market.description}
+            </p>
+          )}
+          {positionBlock}
+          {resolutionBlock}
+          {recentTradesBlock}
+          {commentsBlock}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -195,17 +346,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             </div>
           )}
 
-      {positions.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-          <h2 className="mb-2 font-semibold">Your position</h2>
-          {positions.map((pos) => (
-            <p key={pos.id} className="text-zinc-600 dark:text-zinc-400">
-              {formatShares(pos.shares)} shares of &ldquo;{labelOf(pos.outcome)}&rdquo; — pays{" "}
-              {formatMoney(pos.shares)} if it wins
-            </p>
-          ))}
-        </div>
-      )}
+      {positionBlock}
 
       {isCategorical ? (
         <CategoricalTradePanel
@@ -233,68 +374,9 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         )
       )}
 
-      <ResolutionPanel
-        marketId={market.id}
-        phase={phase}
-        options={resolutionOptions}
-        signedIn={!!userId}
-        isAdmin={!!currentUser?.isAdmin}
-        isProposer={!!userId && userId === market.proposedById}
-        proposedLabel={market.proposedOutcome ? labelOf(market.proposedOutcome) : null}
-        proposedBy={usernameOf(market.proposedById)}
-        disputedBy={usernameOf(market.disputedById)}
-        challengeUntil={market.challengeUntil?.toISOString() ?? null}
-      />
-
-      <div>
-        <h2 className="mb-3 font-semibold">Recent trades</h2>
-        {recentTrades.length === 0 ? (
-          <p className="text-sm text-zinc-500">No trades yet. Be the first.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {recentTrades.map((t) => {
-              const yesNoColor =
-                t.outcome === "YES"
-                  ? "font-semibold text-emerald-600 dark:text-emerald-400"
-                  : t.outcome === "NO"
-                    ? "font-semibold text-rose-600 dark:text-rose-400"
-                    : "font-semibold text-indigo-600 dark:text-indigo-400";
-              return (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between border-b border-zinc-100 py-2 dark:border-zinc-900"
-                >
-                  <span>
-                    <Link
-                      href={`/users/${t.user.username}`}
-                      className="font-medium hover:underline"
-                    >
-                      @{t.user.username}
-                    </Link>{" "}
-                    {t.shares >= 0 ? "bought" : "sold"} {formatShares(Math.abs(t.shares))}{" "}
-                    <span className={yesNoColor}>{labelOf(t.outcome)}</span> for{" "}
-                    {formatMoney(Math.abs(t.cost))}
-                  </span>
-                  <span className="font-mono text-xs text-zinc-500">
-                    → {formatPercent(t.probAfter)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      <CommentSection
-        marketId={market.id}
-        signedIn={!!userId}
-        initial={comments.map((c) => ({
-          id: c.id,
-          username: c.user.username,
-          body: c.body,
-          createdAt: c.createdAt.toISOString(),
-        }))}
-      />
+      {resolutionBlock}
+      {recentTradesBlock}
+      {commentsBlock}
     </div>
   );
 }

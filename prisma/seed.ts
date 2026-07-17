@@ -75,14 +75,13 @@ async function main() {
   });
 
   async function createMatch(teamA: string, teamB: string, closesAt: Date) {
-    const labels = [teamA, teamB, "Draw"];
+    const labels = [teamA, teamB];
     return prisma.market.create({
       data: {
         question: `${teamA} vs ${teamB} — who wins?`,
         description:
-          `World Cup match, ${teamA} vs ${teamB}. Resolves to the team that wins in ` +
-          `regulation/extra time/penalties per FIFA's official match result, or Draw if the ` +
-          `official result is a tie (group-stage draw).`,
+          `World Cup knockout match, ${teamA} vs ${teamB}. Resolves to the team that wins ` +
+          `(after extra time / penalties if needed) per FIFA's official match result.`,
         kind: "CATEGORICAL",
         category: "World Cup",
         closesAt,
@@ -92,16 +91,14 @@ async function main() {
     });
   }
 
-  // Two future matches.
+  // Two future matches, each a two-team (Team A / Team B) market.
   const spainArg = await createMatch("Spain", "Argentina", new Date("2026-07-19T19:00:00Z"));
-  await tradeCategorical(bob.id, spainArg.id, 0, 140); // Spain
-  await tradeCategorical(alice.id, spainArg.id, 1, 95); // Argentina
-  await tradeCategorical(bob.id, spainArg.id, 2, 20); // Draw
+  await tradeCategorical(alice.id, spainArg.id, 1, 150); // Argentina favored
+  await tradeCategorical(bob.id, spainArg.id, 0, 95); // Spain
 
-  const engFra = await createMatch("England", "France", new Date("2026-07-22T19:00:00Z"));
-  await tradeCategorical(alice.id, engFra.id, 1, 120); // France
-  await tradeCategorical(bob.id, engFra.id, 0, 85); // England
-  await tradeCategorical(alice.id, engFra.id, 2, 20); // Draw
+  const engFra = await createMatch("France", "England", new Date("2026-07-18T17:00:00Z"));
+  await tradeCategorical(alice.id, engFra.id, 0, 160); // France favored
+  await tradeCategorical(bob.id, engFra.id, 1, 80); // England
 
   for (const m of [spainArg, engFra]) {
     const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id }, include: { outcomes: true } });
