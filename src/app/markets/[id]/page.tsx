@@ -15,8 +15,10 @@ import { pricedOutcomes } from "@/lib/market";
 import { marketPhase } from "@/lib/resolution";
 import { getCurrentUser } from "@/lib/session";
 import { teamMeta } from "@/lib/teams";
+import AutoRefresh from "@/components/AutoRefresh";
 import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
+import LiveScoreControl from "@/components/LiveScoreControl";
 import MatchChart from "@/components/MatchChart";
 import MatchHeader from "@/components/MatchHeader";
 import MatchTradePanel from "@/components/MatchTradePanel";
@@ -215,6 +217,26 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     />
   );
 
+  // Payoff celebration: reconstruct the caller's net winning shares from their
+  // trades on the winning outcome (positions are zeroed at resolution).
+  const winnings =
+    market.resolution && userId
+      ? market.trades
+          .filter((t) => t.userId === userId && t.outcome === market.resolution)
+          .reduce((sum, t) => sum + t.shares, 0)
+      : 0;
+  const payoutBlock =
+    market.resolution && winnings > 1e-9 ? (
+      <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-center dark:border-emerald-800 dark:bg-emerald-950/40">
+        <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+          🎉 You won {formatMoney(winnings)} on “{labelOf(market.resolution)}”!
+        </p>
+        <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-400/70">
+          Paid out to your balance. Nice call.
+        </p>
+      </div>
+    ) : null;
+
   // ----- Match layout: flags, two-line chart, right-hand sticky trade box -----
   if (isMatch) {
     const teamA = priced[0].label;
@@ -224,6 +246,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
       // chart (DOM order); on desktop, `order` puts the chart top-left, the
       // trade box top-right (sticky sidebar), and the details below the chart.
       <div className="grid gap-x-8 gap-y-6 lg:grid-cols-3">
+        {!market.resolution && <AutoRefresh />}
+        {payoutBlock && <div className="lg:order-1 lg:col-span-3">{payoutBlock}</div>}
         <div className="space-y-6 lg:order-1 lg:col-span-2">
           <div>
             <p className="text-xs font-medium text-zinc-500">Sports · World Cup</p>
@@ -234,7 +258,15 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800">
-            <MatchHeader teamA={teamA} teamB={teamB} kickoff={market.closesAt} />
+            <MatchHeader
+              teamA={teamA}
+              teamB={teamB}
+              kickoff={market.closesAt}
+              matchStatus={market.matchStatus}
+              homeScore={market.homeScore}
+              awayScore={market.awayScore}
+              matchMinute={market.matchMinute}
+            />
             {matchSeries.length > 0 && (
               <div className="border-t border-zinc-100 p-4 dark:border-zinc-900">
                 <MatchChart series={matchSeries} />
@@ -244,7 +276,18 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="lg:order-2 lg:col-span-1">
-          <div className="lg:sticky lg:top-28">
+          <div className="space-y-4 lg:sticky lg:top-28">
+            {currentUser?.isAdmin && (
+              <LiveScoreControl
+                marketId={market.id}
+                teamA={teamA}
+                teamB={teamB}
+                homeScore={market.homeScore}
+                awayScore={market.awayScore}
+                matchStatus={market.matchStatus}
+                matchMinute={market.matchMinute}
+              />
+            )}
             {open ? (
               <MatchTradePanel
                 marketId={market.id}
@@ -279,6 +322,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="space-y-8">
+      {!market.resolution && <AutoRefresh />}
+      {payoutBlock}
       <div>
         <div className="flex items-start justify-between gap-6">
           <h1 className="text-2xl font-bold">{market.question}</h1>

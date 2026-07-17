@@ -32,6 +32,12 @@ model Market {
   qYes        Float      @default(0) // binary only
   qNo         Float      @default(0) // binary only
   volume      Float      @default(0) // total |currency| traded, updated per trade
+  // Live match state (World Cup match markets), updated by an admin as the game
+  // is played. matchStatus: "SCHEDULED" | "LIVE" | "FINAL".
+  matchStatus String     @default("SCHEDULED")
+  homeScore   Int? // score of outcomes[0] (team A)
+  awayScore   Int? // score of outcomes[1] (team B)
+  matchMinute String? // free-form clock label, e.g. "63'", "HT", "FT"
   resolution  String? // final winning key, set only on finalize
   resolvedAt  DateTime?
   // Optimistic-oracle resolution state (all null until a proposal is made).
