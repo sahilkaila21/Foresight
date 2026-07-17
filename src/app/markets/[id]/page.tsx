@@ -12,13 +12,13 @@ import {
 } from "@/lib/format";
 import { pricesN, probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
+import { marketPhase } from "@/lib/resolution";
 import { getCurrentUser } from "@/lib/session";
-import CategoricalResolvePanel from "@/components/CategoricalResolvePanel";
 import CategoricalTradePanel from "@/components/CategoricalTradePanel";
 import CommentSection from "@/components/CommentSection";
 import MultiProbChart, { type Series } from "@/components/MultiProbChart";
 import ProbChart from "@/components/ProbChart";
-import ResolvePanel from "@/components/ResolvePanel";
+import ResolutionPanel from "@/components/ResolutionPanel";
 import TradePanel from "@/components/TradePanel";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +60,36 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
   const open = !market.resolution && !isClosed(market.closesAt);
   const yesProb = probYes({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB });
+
+  // Resolution phase + the usernames involved in any proposal/dispute.
+  const phase = marketPhase(market, nowMs());
+  const involvedIds = [market.proposedById, market.disputedById].filter(
+    (x): x is string => !!x
+  );
+  const involved = involvedIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: involvedIds } },
+        select: { id: true, username: true },
+      })
+    : [];
+  const usernameOf = (uid: string | null) =>
+    uid ? (involved.find((u) => u.id === uid)?.username ?? null) : null;
+  const resolutionOptions = isCategorical
+    ? priced.map((o) => ({ key: o.id, label: o.label }))
+    : [
+        { key: "YES", label: "YES" },
+        { key: "NO", label: "NO" },
+      ];
+  const phaseLabel: Record<typeof phase, string> = {
+    OPEN: `closes ${formatDate(market.closesAt)}`,
+    AWAITING_PROPOSAL: "closed — awaiting a proposal",
+    IN_CHALLENGE: "outcome proposed, in challenge window",
+    READY_TO_FINALIZE: "proposed, ready to finalize",
+    DISPUTED: "disputed — awaiting admin",
+    RESOLVED: market.resolvedAt
+      ? `resolved "${labelOf(market.resolution!)}" on ${formatDate(market.resolvedAt)}`
+      : "resolved",
+  };
 
   const endT = market.resolvedAt?.getTime() ?? nowMs();
 
@@ -125,12 +155,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           <Link href={`/users/${market.creator.username}`} className="hover:underline">
             @{market.creator.username}
           </Link>{" "}
-          ·{" "}
-          {market.resolution
-            ? `resolved "${labelOf(market.resolution)}" on ${formatDate(market.resolvedAt!)}`
-            : open
-              ? `closes ${formatDate(market.closesAt)}`
-              : "closed, awaiting resolution"}
+          · {phaseLabel[phase]}
         </p>
         <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-zinc-500">
           <span>
@@ -237,16 +262,18 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           />
         ))}
 
-      {!market.resolution &&
-        userId === market.creatorId &&
-        (isCategorical ? (
-          <CategoricalResolvePanel
-            marketId={market.id}
-            outcomes={priced.map((o) => ({ id: o.id, label: o.label }))}
-          />
-        ) : (
-          <ResolvePanel marketId={market.id} />
-        ))}
+      <ResolutionPanel
+        marketId={market.id}
+        phase={phase}
+        options={resolutionOptions}
+        signedIn={!!userId}
+        isAdmin={!!currentUser?.isAdmin}
+        isProposer={!!userId && userId === market.proposedById}
+        proposedLabel={market.proposedOutcome ? labelOf(market.proposedOutcome) : null}
+        proposedBy={usernameOf(market.proposedById)}
+        disputedBy={usernameOf(market.disputedById)}
+        challengeUntil={market.challengeUntil?.toISOString() ?? null}
+      />
 
       <div>
         <h2 className="mb-3 font-semibold">Recent trades</h2>

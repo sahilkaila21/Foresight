@@ -12,6 +12,7 @@ model User {
   username     String     @unique
   passwordHash String
   balance      Float      @default(1000)
+  isAdmin      Boolean    @default(false)
   createdAt    DateTime   @default(now())
   markets      Market[]
   trades       Trade[]
@@ -30,8 +31,17 @@ model Market {
   qYes        Float      @default(0) // binary only
   qNo         Float      @default(0) // binary only
   volume      Float      @default(0) // total |currency| traded, updated per trade
-  resolution  String? // binary: "YES"|"NO"; categorical: winning Outcome id
+  resolution  String? // final winning key, set only on finalize
   resolvedAt  DateTime?
+  // Optimistic-oracle resolution state (all null until a proposal is made).
+  proposedOutcome String? // proposed winning key (YES/NO or Outcome id)
+  proposedById    String?
+  proposedAt      DateTime?
+  challengeUntil  DateTime? // unchallenged proposals can be finalized after this
+  disputed        Boolean   @default(false)
+  disputedById    String?
+  proposerBond    Float     @default(0)
+  disputerBond    Float     @default(0)
   creatorId   String
   creator     User       @relation(fields: [creatorId], references: [id])
   createdAt   DateTime   @default(now())

@@ -125,16 +125,28 @@ Validation errors return `400 {error}`, auth failures `401`, ownership failures 
   and an `Outcome` table; `Trade`/`Position.outcome` holds `"YES"/"NO"` for
   binary and the `Outcome` id for categorical, so those tables were unchanged.
   Worst-case maker subsidy generalizes to `b · ln(N)`.
+- ✅ Market categories + volume/liquidity discovery; Polymarket-style trade panel.
+- ✅ Public user profiles with track record.
+- ✅ **Optimistic-oracle resolution** (`src/lib/resolution.ts`) — replaces the
+  creator-resolves trust model. After a market closes, anyone can **propose** an
+  outcome (bonded); a **challenge window** opens; if unchallenged anyone can
+  **finalize** (permissionless settlement). A **dispute** (also bonded) escalates
+  to an **admin** (`User.isAdmin`) who **adjudicates**, slashing the wrong side's
+  bond to the right side. Phase state machine is pure and unit-tested. This is a
+  UMA-style optimistic oracle and the direct precursor to on-chain resolution.
 
 **Still ahead**
-- Admin/oracle resolution + dispute flow (replace creator-resolves trust model).
 - Loans/daily bonuses to keep the play-money economy liquid.
-- Market tags/categories; Postgres + hosting (Vercel/Fly), rate limiting, audit log.
+- Postgres + hosting (Vercel/Fly), rate limiting, audit log.
+- Decentralize the admin/oracle: replace the single admin with a stake-weighted
+  dispute vote (DVM), the last centralized piece before going on-chain.
 
 **Longer-term direction: decentralization / on-chain settlement**
 The money layer today is float play-points in Prisma. The intended future is a
 decentralized, blockchain-backed version where settlement (balances, trades,
 resolution, payouts) lives on-chain — e.g. a smart-contract LMSR/AMM with this
-app acting as frontend + indexer, and oracle-based resolution. Chain and design
-are not yet chosen; the current engine (`src/lib/lmsr.ts`) is written as pure
-math so it can inform or port to a contract implementation.
+app acting as frontend + indexer. The resolution model is already structured for
+this: the bonded propose→challenge→dispute→adjudicate flow in `resolution.ts`
+maps directly onto a UMA-style optimistic oracle, with the current admin standing
+in for a decentralized dispute-resolution committee. Chain and design are not yet
+chosen; the engine (`src/lib/lmsr.ts`) is pure math so it can port to a contract.

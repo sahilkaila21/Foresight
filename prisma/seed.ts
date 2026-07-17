@@ -82,6 +82,11 @@ async function main() {
     update: { balance: 1000 },
     create: { username: "bob", passwordHash },
   });
+  await prisma.user.upsert({
+    where: { username: "admin" },
+    update: { balance: 1000, isAdmin: true },
+    create: { username: "admin", passwordHash, isAdmin: true },
+  });
 
   const binaries = await Promise.all(
     [
@@ -145,6 +150,70 @@ async function main() {
   await tradeCategorical(alice.id, election.id, 1, 110); // Republican
   await tradeCategorical(bob.id, election.id, 2, 15); // Independent
 
+  // Closed markets demonstrating each resolution phase. Bonds are staked by
+  // deducting from the proposer/disputer, mirroring the API routes.
+  const BOND = 50;
+  const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  const closedMarket = (question: string) =>
+    prisma.market.create({
+      data: {
+        question,
+        description: "Demo market for the optimistic-oracle resolution flow.",
+        category: "Culture",
+        closesAt: past,
+        creatorId: alice.id,
+      },
+    });
+
+  // Phase: AWAITING_PROPOSAL — closed, nobody has proposed yet.
+  await closedMarket("Did the home team win last weekend's demo match?");
+
+  // Phase: IN_CHALLENGE — bob proposed YES, window still open.
+  const inChallenge = await closedMarket("Was the demo product launched on schedule?");
+  await prisma.user.update({ where: { id: bob.id }, data: { balance: { decrement: BOND } } });
+  await prisma.market.update({
+    where: { id: inChallenge.id },
+    data: {
+      proposedOutcome: "YES",
+      proposedById: bob.id,
+      proposedAt: new Date(),
+      challengeUntil: new Date(Date.now() + 12 * 60 * 60 * 1000),
+      proposerBond: BOND,
+    },
+  });
+
+  // Phase: DISPUTED — bob proposed YES, alice disputed; awaits admin.
+  const disputed = await closedMarket("Did the demo conference sell out?");
+  await prisma.user.update({ where: { id: bob.id }, data: { balance: { decrement: BOND } } });
+  await prisma.user.update({ where: { id: alice.id }, data: { balance: { decrement: BOND } } });
+  await prisma.market.update({
+    where: { id: disputed.id },
+    data: {
+      proposedOutcome: "YES",
+      proposedById: bob.id,
+      proposedAt: new Date(),
+      challengeUntil: new Date(Date.now() + 12 * 60 * 60 * 1000),
+      proposerBond: BOND,
+      disputed: true,
+      disputedById: alice.id,
+      disputerBond: BOND,
+    },
+  });
+
+  // Phase: READY_TO_FINALIZE — alice proposed NO, window elapsed, undisputed.
+  const ready = await closedMarket("Did the demo satellite reach orbit?");
+  await prisma.user.update({ where: { id: alice.id }, data: { balance: { decrement: BOND } } });
+  await prisma.market.update({
+    where: { id: ready.id },
+    data: {
+      proposedOutcome: "NO",
+      proposedById: alice.id,
+      proposedAt: past,
+      challengeUntil: new Date(Date.now() - 60 * 60 * 1000),
+      proposerBond: BOND,
+    },
+  });
+
   for (const m of binaries) {
     const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id } });
     console.log(
@@ -164,7 +233,8 @@ async function main() {
     `  ${e.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
   );
   console.log(
-    `Seeded: alice & bob (password 'password123'), ${binaries.length} binary + 1 categorical market.`
+    `Seeded: alice, bob & admin (password 'password123'), ${binaries.length} binary + 1 categorical ` +
+      `+ 4 resolution-demo markets.`
   );
 }
 
