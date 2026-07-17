@@ -135,19 +135,67 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   const recentTrades = market.trades.slice(-30).reverse();
   const holdings = Object.fromEntries(positions.map((p) => [p.outcome, p.shares]));
 
+  // Cost basis per outcome for the signed-in user (net ₱ put in — buys minus
+  // sell proceeds), so each open position can show its running (unrealized) P/L.
+  // Same net-cost method the portfolio page uses, kept consistent here.
+  const costByOutcome = new Map<string, number>();
+  if (userId) {
+    for (const t of market.trades) {
+      if (t.userId === userId) {
+        costByOutcome.set(t.outcome, (costByOutcome.get(t.outcome) ?? 0) + t.cost);
+      }
+    }
+  }
+  // Current mark-to-market price of an outcome key (₱ per share ≈ its probability).
+  const priceOfKey = (key: string) =>
+    isCategorical
+      ? (priced.find((o) => o.id === key)?.price ?? 0)
+      : key === "YES"
+        ? yesProb
+        : 1 - yesProb;
+
   // Match series = categorical history colored by team.
   const matchSeries = catSeries.map((s) => ({ ...s, color: teamMeta(s.label).color }));
 
   // ----- Shared blocks reused by both the match and standard layouts -----
   const positionBlock = positions.length > 0 && (
     <div className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-      <h2 className="mb-2 font-semibold">Your position</h2>
-      {positions.map((pos) => (
-        <p key={pos.id} className="text-zinc-600 dark:text-zinc-400">
-          {formatShares(pos.shares)} shares of &ldquo;{labelOf(pos.outcome)}&rdquo; — pays{" "}
-          {formatMoney(pos.shares)} if it wins
-        </p>
-      ))}
+      <h2 className="mb-3 font-semibold">Your position</h2>
+      <div className="space-y-3">
+        {positions.map((pos) => {
+          const price = priceOfKey(pos.outcome);
+          const value = pos.shares * price; // sellable value right now
+          const cost = costByOutcome.get(pos.outcome) ?? 0; // net ₱ put in
+          const avgEntry = pos.shares > 1e-9 ? cost / pos.shares : 0; // ₱/share ≈ prob
+          const pnl = value - cost;
+          const up = pnl >= 0;
+          const pnlClass = up
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-rose-600 dark:text-rose-400";
+          return (
+            <div key={pos.id} className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {formatShares(pos.shares)} {labelOf(pos.outcome)}
+                </span>
+                <div className="mt-0.5 text-xs text-zinc-500">
+                  avg {formatPercent(avgEntry)} → now {formatPercent(price)} · pays{" "}
+                  {formatMoney(pos.shares)} if it wins
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className={`font-mono font-semibold ${pnlClass}`}>
+                  {up ? "+" : ""}
+                  {formatMoney(pnl)}
+                </div>
+                <div className="mt-0.5 font-mono text-xs text-zinc-500">
+                  {formatMoney(cost)} → {formatMoney(value)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
