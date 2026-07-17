@@ -2,6 +2,11 @@
  * Multi-outcome probability history: one step line per outcome over time.
  * Pure server-rendered SVG. Series share a common time axis; each outcome's
  * probability is constant between trades, so lines step at each trade.
+ *
+ * To keep many outcomes readable, only the current leader (highest latest
+ * probability) is drawn bold in its color and on top; every other option is
+ * faded to a thin grey line so the overall picture stays legible instead of a
+ * tangle of equal-weight lines.
  */
 
 export interface Series {
@@ -37,6 +42,13 @@ export default function MultiProbChart({ series }: { series: Series[] }) {
     return d;
   };
 
+  const lastP = (s: Series) => s.points[s.points.length - 1].p;
+  // Leader = outcome with the highest current probability; drawn bold on top.
+  let leader = 0;
+  series.forEach((s, i) => {
+    if (lastP(s) > lastP(series[leader])) leader = i;
+  });
+
   return (
     <div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Probability history">
@@ -60,27 +72,52 @@ export default function MultiProbChart({ series }: { series: Series[] }) {
             </text>
           </g>
         ))}
-        {series.map((s, i) => (
-          <path
-            key={s.label}
-            d={stepPath(s.points)}
-            fill="none"
-            strokeWidth={2}
-            stroke={COLORS[i % COLORS.length]}
-          />
-        ))}
+        {/* Non-leaders: thin, faded grey, drawn underneath. */}
+        {series.map((s, i) =>
+          i === leader ? null : (
+            <path
+              key={s.label}
+              d={stepPath(s.points)}
+              fill="none"
+              strokeWidth={1.25}
+              strokeLinejoin="round"
+              className="stroke-zinc-300 dark:stroke-zinc-700"
+            />
+          ),
+        )}
+        {/* Leader: bold, in its color, on top. */}
+        <path
+          d={stepPath(series[leader].points)}
+          fill="none"
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+          stroke={COLORS[leader % COLORS.length]}
+        />
       </svg>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         {series.map((s, i) => {
           const last = s.points[s.points.length - 1];
+          const isLeader = i === leader;
           return (
             <span key={s.label} className="flex items-center gap-1.5">
               <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                className={`inline-block h-2.5 w-2.5 rounded-sm ${isLeader ? "" : "bg-zinc-300 dark:bg-zinc-700"}`}
+                style={isLeader ? { backgroundColor: COLORS[i % COLORS.length] } : undefined}
               />
-              <span className="text-zinc-600 dark:text-zinc-400">{s.label}</span>
-              <span className="font-mono text-zinc-500">{Math.round(last.p * 100)}%</span>
+              <span
+                className={
+                  isLeader
+                    ? "font-semibold text-zinc-800 dark:text-zinc-100"
+                    : "text-zinc-400 dark:text-zinc-500"
+                }
+              >
+                {s.label}
+              </span>
+              <span
+                className={`font-mono ${isLeader ? "text-zinc-600 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-600"}`}
+              >
+                {Math.round(last.p * 100)}%
+              </span>
             </span>
           );
         })}

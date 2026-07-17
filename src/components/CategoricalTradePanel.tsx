@@ -94,12 +94,17 @@ export default function CategoricalTradePanel({
           const won = resolution === o.id;
           const isSel = selected === i;
           const color = COLORS[i % COLORS.length];
+          const clickable = tradable && signedIn && !resolution;
+          const RowTag = clickable ? "button" : "div";
           return (
-            <div
+            <RowTag
               key={o.id}
-              className={`flex items-center gap-3 rounded-xl border p-3 transition ${
+              {...(clickable ? { type: "button" as const, onClick: () => setSelected(i) } : {})}
+              className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+                clickable ? "cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600" : ""
+              } ${
                 isSel && tradable
-                  ? "border-zinc-300 dark:border-zinc-600"
+                  ? "border-zinc-300 ring-1 ring-zinc-200 dark:border-zinc-600 dark:ring-zinc-700"
                   : "border-zinc-200 dark:border-zinc-800"
               }`}
             >
@@ -123,22 +128,21 @@ export default function CategoricalTradePanel({
                   <span className="w-10 shrink-0 text-right font-mono text-sm text-zinc-500">
                     {formatPercent(prices[i])}
                   </span>
-                  {tradable && signedIn && (
-                    <button
-                      onClick={() => setSelected(i)}
+                  {clickable && (
+                    <span
                       className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
                         isSel
                           ? "text-white"
-                          : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                          : "bg-zinc-100 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
                       }`}
                       style={isSel ? { backgroundColor: color } : undefined}
                     >
-                      Buy
-                    </button>
+                      {isSel ? "Selected" : "Buy"}
+                    </span>
                   )}
                 </>
               )}
-            </div>
+            </RowTag>
           );
         })}
       </div>

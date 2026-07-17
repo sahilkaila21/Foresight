@@ -5,6 +5,7 @@ import LogoutButton from "./LogoutButton";
 import CategoryTabs from "./CategoryTabs";
 import HowToUse from "./HowToUse";
 import SearchBox from "./SearchBox";
+import ThemeToggle from "./ThemeToggle";
 
 export default async function NavBar() {
   const user = await getCurrentUser();
@@ -14,7 +15,7 @@ export default async function NavBar() {
       <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
         <Link href="/" className="flex shrink-0 items-center gap-2 text-2xl font-extrabold tracking-tight">
           <span className="text-3xl">🔮</span>
-          <span className="hidden sm:inline">Foresight</span>
+          <span className="hidden text-xl sm:inline">Foresight</span>
         </Link>
 
         <div className="flex-1">
@@ -22,6 +23,7 @@ export default async function NavBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3 text-sm">
+          <ThemeToggle />
           <HowToUse />
           {user ? (
             <>
