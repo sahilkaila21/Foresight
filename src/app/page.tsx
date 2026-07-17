@@ -114,23 +114,31 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </Suspense>
 
       {showSidebar && standing && (
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-gradient-to-r from-indigo-50 to-violet-50 p-4 dark:border-zinc-800 dark:from-indigo-950/30 dark:to-violet-950/30">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{["🥇", "🥈", "🥉"][standing.rank - 1] ?? "📊"}</span>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-violet-50 to-fuchsia-50 p-5 shadow-sm dark:border-indigo-950 dark:from-indigo-950/40 dark:via-violet-950/30 dark:to-fuchsia-950/20 sm:p-6">
+          <div className="flex items-center gap-4 sm:gap-5">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/70 text-4xl shadow-inner ring-1 ring-black/5 dark:bg-white/10 sm:h-20 sm:w-20 sm:text-5xl">
+              {["🥇", "🥈", "🥉"][standing.rank - 1] ?? "🏅"}
+            </span>
             <div>
-              <p className="text-sm font-semibold">
-                You&apos;re #{standing.rank} of {standing.total}
+              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                Your standing
               </p>
-              <p className="text-xs text-zinc-500">
-                Net worth <span className="font-mono">{formatMoney(standing.netWorth)}</span> ·{" "}
+              <p className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+                #{standing.rank}{" "}
+                <span className="text-lg font-semibold text-zinc-400 sm:text-xl">
+                  of {standing.total}
+                </span>
+              </p>
+              <p className="mt-0.5 text-sm text-zinc-500">
+                Net worth <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-300">{formatMoney(standing.netWorth)}</span>{" "}
                 <span
                   className={
                     standing.profit >= 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-rose-600 dark:text-rose-400"
+                      ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                      : "font-semibold text-rose-600 dark:text-rose-400"
                   }
                 >
-                  {standing.profit >= 0 ? "+" : ""}
+                  {standing.profit >= 0 ? "▲ +" : "▼ "}
                   {formatMoney(standing.profit)}
                 </span>
               </p>
@@ -138,18 +146,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
           <Link
             href="/leaderboard"
-            className="rounded-full border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:border-zinc-400 dark:border-zinc-700"
+            className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             Leaderboard →
           </Link>
         </div>
       )}
 
-      {showSidebar && activity.length > 0 && (
-        <div className="mb-5">
-          <ActivityFeed items={activity} />
-        </div>
-      )}
       {markets.length === 0 ? (
         <p className="text-zinc-500">
           {q.trim() || status !== "all" || category ? (
@@ -169,6 +172,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           {markets.map((m) => (
             <MarketCard key={m.id} m={m} />
           ))}
+        </div>
+      )}
+
+      {showSidebar && activity.length > 0 && (
+        <div className="mt-8">
+          <ActivityFeed items={activity} />
         </div>
       )}
     </div>

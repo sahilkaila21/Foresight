@@ -34,9 +34,15 @@ export default function MarketCard({ m }: { m: MarketWithOutcomes }) {
       className="flex h-full flex-col rounded-2xl border border-zinc-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-zinc-700"
     >
       <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-lg dark:bg-zinc-900">
-          {icon}
-        </span>
+        {m.category === "World Cup" ? (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 via-yellow-400 to-amber-600 text-lg shadow-sm ring-1 ring-amber-500/40">
+            <span className="drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">⚽</span>
+          </span>
+        ) : (
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-lg dark:bg-zinc-900">
+            {icon}
+          </span>
+        )}
         <p className="line-clamp-2 flex-1 text-sm font-semibold leading-snug">{m.question}</p>
         {!isCat && (
           <BinaryPill qYes={m.qYes} qNo={m.qNo} b={m.liquidityB} resolution={m.resolution} />

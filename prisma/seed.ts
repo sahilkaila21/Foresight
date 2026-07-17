@@ -100,7 +100,30 @@ async function main() {
   await tradeCategorical(alice.id, engFra.id, 0, 160); // France favored
   await tradeCategorical(bob.id, engFra.id, 1, 80); // England
 
-  for (const m of [spainArg, engFra]) {
+  // Golden Boot — a multi-player (categorical) award market.
+  const goldenBoot = await prisma.market.create({
+    data: {
+      question: "Golden Boot — top scorer of the World Cup?",
+      description:
+        "Resolves to the player who finishes as the World Cup's top goalscorer per FIFA's official Golden Boot award (tie-break: most assists, then fewest minutes played).",
+      kind: "CATEGORICAL",
+      category: "World Cup",
+      closesAt: new Date("2026-07-19T19:00:00Z"),
+      creatorId: alice.id,
+      outcomes: {
+        create: ["Mbappé", "Kane", "Yamal", "Álvarez", "Vinícius Jr"].map((label, i) => ({
+          label,
+          sortOrder: i,
+        })),
+      },
+    },
+  });
+  await tradeCategorical(bob.id, goldenBoot.id, 0, 120); // Mbappé
+  await tradeCategorical(alice.id, goldenBoot.id, 1, 70); // Kane
+  await tradeCategorical(bob.id, goldenBoot.id, 2, 55); // Yamal
+  await tradeCategorical(alice.id, goldenBoot.id, 3, 40); // Álvarez
+
+  for (const m of [spainArg, engFra, goldenBoot]) {
     const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id }, include: { outcomes: true } });
     const sorted = [...f.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
     const prices = pricesN(sorted.map((o) => o.q), f.liquidityB);
@@ -108,7 +131,9 @@ async function main() {
       `  ${f.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
     );
   }
-  console.log("Seeded: alice, bob & admin (password 'password123') + 2 World Cup match markets.");
+  console.log(
+    "Seeded: alice, bob & admin (password 'password123') + 2 match markets + Golden Boot."
+  );
 }
 
 main()
