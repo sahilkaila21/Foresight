@@ -16,13 +16,13 @@ import { marketPhase } from "@/lib/resolution";
 import { getCurrentUser } from "@/lib/session";
 import { teamMeta } from "@/lib/teams";
 import AutoRefresh from "@/components/AutoRefresh";
-import CategoricalTradePanel from "@/components/CategoricalTradePanel";
+import CategoricalMarketSection from "@/components/CategoricalMarketSection";
 import CommentSection from "@/components/CommentSection";
 import LiveScoreControl from "@/components/LiveScoreControl";
 import MatchChart from "@/components/MatchChart";
 import MatchHeader from "@/components/MatchHeader";
 import MatchTradePanel from "@/components/MatchTradePanel";
-import MultiProbChart, { type Series } from "@/components/MultiProbChart";
+import { type Series } from "@/components/MultiProbChart";
 import ProbChart from "@/components/ProbChart";
 import ResolutionPanel from "@/components/ResolutionPanel";
 import TradePanel from "@/components/TradePanel";
@@ -377,24 +377,10 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         )}
       </div>
 
-      {isCategorical && catSeries.length > 0 && (
-        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <MultiProbChart series={catSeries} />
-        </div>
-      )}
-
-      {isCategorical
-        ? null
-        : market.trades.length > 0 && (
-            <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-              <ProbChart points={chartPoints} />
-            </div>
-          )}
-
-      {positionBlock}
-
       {isCategorical ? (
-        <CategoricalTradePanel
+        <CategoricalMarketSection
+          series={catSeries}
+          positionBlock={positionBlock}
           marketId={market.id}
           outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
           b={market.liquidityB}
@@ -405,18 +391,26 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           holdings={holdings}
         />
       ) : (
-        open && (
-          <TradePanel
-            marketId={market.id}
-            qYes={market.qYes}
-            qNo={market.qNo}
-            b={market.liquidityB}
-            signedIn={!!userId}
-            balance={currentUser?.balance ?? 0}
-            yesShares={holdings["YES"] ?? 0}
-            noShares={holdings["NO"] ?? 0}
-          />
-        )
+        <>
+          {market.trades.length > 0 && (
+            <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+              <ProbChart points={chartPoints} />
+            </div>
+          )}
+          {positionBlock}
+          {open && (
+            <TradePanel
+              marketId={market.id}
+              qYes={market.qYes}
+              qNo={market.qNo}
+              b={market.liquidityB}
+              signedIn={!!userId}
+              balance={currentUser?.balance ?? 0}
+              yesShares={holdings["YES"] ?? 0}
+              noShares={holdings["NO"] ?? 0}
+            />
+          )}
+        </>
       )}
 
       {resolutionBlock}

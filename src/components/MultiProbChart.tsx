@@ -3,10 +3,11 @@
  * Pure server-rendered SVG. Series share a common time axis; each outcome's
  * probability is constant between trades, so lines step at each trade.
  *
- * To keep many outcomes readable, only the current leader (highest latest
- * probability) is drawn bold in its color and on top; every other option is
- * faded to a thin grey line so the overall picture stays legible instead of a
- * tangle of equal-weight lines.
+ * To keep many outcomes readable, only one outcome is drawn bold in its color
+ * and on top; every other option is faded to a thin grey line so the overall
+ * picture stays legible instead of a tangle of equal-weight lines. The
+ * highlighted outcome follows the `selected` prop (the player chosen in the
+ * trade panel); with no selection it defaults to the current leader.
  */
 
 export interface Series {
@@ -27,7 +28,13 @@ const PAD_L = 34;
 const PAD_R = 8;
 const PAD_Y = 10;
 
-export default function MultiProbChart({ series }: { series: Series[] }) {
+export default function MultiProbChart({
+  series,
+  selected,
+}: {
+  series: Series[];
+  selected?: number;
+}) {
   const flat = series.flatMap((s) => s.points.map((p) => p.t));
   if (flat.length < 2) return null;
   const t0 = Math.min(...flat);
@@ -43,11 +50,14 @@ export default function MultiProbChart({ series }: { series: Series[] }) {
   };
 
   const lastP = (s: Series) => s.points[s.points.length - 1].p;
-  // Leader = outcome with the highest current probability; drawn bold on top.
+  // Highlight the selected outcome; if none given, fall back to the current
+  // leader (highest latest probability). Drawn bold, in color, on top.
   let leader = 0;
   series.forEach((s, i) => {
     if (lastP(s) > lastP(series[leader])) leader = i;
   });
+  const highlight =
+    selected != null && selected >= 0 && selected < series.length ? selected : leader;
 
   return (
     <div>
@@ -72,9 +82,9 @@ export default function MultiProbChart({ series }: { series: Series[] }) {
             </text>
           </g>
         ))}
-        {/* Non-leaders: thin, faded grey, drawn underneath. */}
+        {/* Non-highlighted: thin, faded grey, drawn underneath. */}
         {series.map((s, i) =>
-          i === leader ? null : (
+          i === highlight ? null : (
             <path
               key={s.label}
               d={stepPath(s.points)}
@@ -85,19 +95,19 @@ export default function MultiProbChart({ series }: { series: Series[] }) {
             />
           ),
         )}
-        {/* Leader: bold, in its color, on top. */}
+        {/* Highlighted: bold, in its color, on top. */}
         <path
-          d={stepPath(series[leader].points)}
+          d={stepPath(series[highlight].points)}
           fill="none"
           strokeWidth={2.5}
           strokeLinejoin="round"
-          stroke={COLORS[leader % COLORS.length]}
+          stroke={COLORS[highlight % COLORS.length]}
         />
       </svg>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
         {series.map((s, i) => {
           const last = s.points[s.points.length - 1];
-          const isLeader = i === leader;
+          const isLeader = i === highlight;
           return (
             <span key={s.label} className="flex items-center gap-1.5">
               <span

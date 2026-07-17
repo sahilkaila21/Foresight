@@ -1,0 +1,25 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="orb" cx="38%" cy="34%" r="70%">
+      <stop offset="0%" stop-color="#f5e9ff"/>
+      <stop offset="40%" stop-color="#c99cf5"/>
+      <stop offset="75%" stop-color="#8b3fd6"/>
+      <stop offset="100%" stop-color="#5a189a"/>
+    </radialGradient>
+    <linearGradient id="stand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+  <!-- stand -->
+  <path d="M9 27 Q16 24 23 27 L21 30 Q16 31.5 11 30 Z" fill="url(#stand)"/>
+  <ellipse cx="16" cy="27" rx="7" ry="2.2" fill="#6d28d9"/>
+  <!-- crystal ball -->
+  <circle cx="16" cy="14" r="11" fill="url(#orb)"/>
+  <circle cx="16" cy="14" r="11" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="0.6"/>
+  <!-- highlight -->
+  <ellipse cx="12" cy="10" rx="4" ry="2.6" fill="#ffffff" fill-opacity="0.65" transform="rotate(-30 12 10)"/>
+  <!-- sparkles -->
+  <path d="M22 9 l0.7 1.6 1.6 0.7 -1.6 0.7 -0.7 1.6 -0.7 -1.6 -1.6 -0.7 1.6 -0.7 Z" fill="#ffffff" fill-opacity="0.85"/>
+  <circle cx="20.5" cy="18" r="0.8" fill="#ffffff" fill-opacity="0.7"/>
+</svg>

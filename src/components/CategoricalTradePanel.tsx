@@ -22,6 +22,8 @@ interface Props {
   signedIn: boolean;
   balance: number;
   holdings: Record<string, number>; // outcomeId -> shares held
+  selected: number; // controlled: index of the selected outcome
+  onSelectChange: (i: number) => void;
 }
 
 const QUICK_ADD = [10, 50, 100, 500];
@@ -35,9 +37,10 @@ export default function CategoricalTradePanel({
   signedIn,
   balance,
   holdings,
+  selected,
+  onSelectChange,
 }: Props) {
   const router = useRouter();
-  const [selected, setSelected] = useState(0);
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("0");
   const [busy, setBusy] = useState(false);
@@ -99,7 +102,7 @@ export default function CategoricalTradePanel({
           return (
             <RowTag
               key={o.id}
-              {...(clickable ? { type: "button" as const, onClick: () => setSelected(i) } : {})}
+              {...(clickable ? { type: "button" as const, onClick: () => onSelectChange(i) } : {})}
               className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
                 clickable ? "cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-600" : ""
               } ${
