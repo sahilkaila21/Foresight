@@ -2,36 +2,42 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/session";
 import { formatMoney } from "@/lib/format";
 import LogoutButton from "./LogoutButton";
+import CategoryTabs from "./CategoryTabs";
+import SearchBox from "./SearchBox";
 
 export default async function NavBar() {
   const user = await getCurrentUser();
 
   return (
-    <header className="border-b border-zinc-200 dark:border-zinc-800">
-      <nav className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
-        <div className="flex items-center gap-4 sm:gap-6">
-          <Link href="/" className="text-lg font-bold tracking-tight">
-            🔮 Foresight
-          </Link>
-          <Link
-            href="/markets/new"
-            className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            Create market
-          </Link>
-          <Link
-            href="/leaderboard"
-            className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            Leaderboard
-          </Link>
+    <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
+      <nav className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+        <Link href="/" className="flex shrink-0 items-center gap-1.5 text-lg font-bold tracking-tight">
+          <span className="text-xl">🔮</span>
+          <span className="hidden sm:inline">Foresight</span>
+        </Link>
+
+        <div className="flex-1">
+          <SearchBox />
         </div>
-        <div className="flex items-center gap-3 text-sm sm:gap-4">
+
+        <div className="flex shrink-0 items-center gap-3 text-sm">
           {user ? (
             <>
               <Link
+                href="/markets/new"
+                className="hidden rounded-md border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700 hover:border-zinc-400 sm:inline dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500"
+              >
+                Create
+              </Link>
+              <Link
+                href="/leaderboard"
+                className="hidden text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Leaderboard
+              </Link>
+              <Link
                 href="/portfolio"
-                className="font-mono font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                className="font-mono font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
                 title="Portfolio"
               >
                 {formatMoney(user.balance)}
@@ -46,12 +52,21 @@ export default async function NavBar() {
             </>
           ) : (
             <>
-              <Link href="/login" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+              <Link
+                href="/leaderboard"
+                className="hidden text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                href="/login"
+                className="rounded-md px-3 py-1.5 font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
                 Log in
               </Link>
               <Link
                 href="/signup"
-                className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+                className="rounded-md bg-zinc-900 px-3 py-1.5 font-semibold text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 Sign up
               </Link>
@@ -59,6 +74,7 @@ export default async function NavBar() {
           )}
         </div>
       </nav>
+      <CategoryTabs />
     </header>
   );
 }

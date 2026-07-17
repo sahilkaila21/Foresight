@@ -10,7 +10,8 @@ export interface Series {
 }
 
 // Fixed palette (inline stroke keeps Tailwind from purging dynamic classes).
-const COLORS = [
+// Exported so other outcome-list UI (e.g. the trade panel) uses matching colors.
+export const COLORS = [
   "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9",
   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#84cc16",
 ];

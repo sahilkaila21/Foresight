@@ -187,45 +187,13 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {isCategorical ? (
-        <div className="space-y-2">
-          {priced.map((o) => {
-            const won = market.resolution === o.id;
-            return (
-              <div
-                key={o.id}
-                className={`rounded-lg border p-3 ${
-                  won
-                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30"
-                    : "border-zinc-200 dark:border-zinc-800"
-                }`}
-              >
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">
-                    {o.label}
-                    {won && " ✓"}
-                  </span>
-                  <span className="font-mono text-zinc-600 dark:text-zinc-400">
-                    {formatPercent(o.price)}
-                  </span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                  <div
-                    className={won ? "h-full bg-emerald-500" : "h-full bg-indigo-500"}
-                    style={{ width: `${Math.max(o.price * 100, 1)}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        market.trades.length > 0 && (
-          <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-            <ProbChart points={chartPoints} />
-          </div>
-        )
-      )}
+      {isCategorical
+        ? null
+        : market.trades.length > 0 && (
+            <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+              <ProbChart points={chartPoints} />
+            </div>
+          )}
 
       {positions.length > 0 && (
         <div className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
@@ -239,17 +207,19 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {open &&
-        (isCategorical ? (
-          <CategoricalTradePanel
-            marketId={market.id}
-            outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
-            b={market.liquidityB}
-            signedIn={!!userId}
-            balance={currentUser?.balance ?? 0}
-            holdings={holdings}
-          />
-        ) : (
+      {isCategorical ? (
+        <CategoricalTradePanel
+          marketId={market.id}
+          outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
+          b={market.liquidityB}
+          resolution={market.resolution}
+          tradable={open}
+          signedIn={!!userId}
+          balance={currentUser?.balance ?? 0}
+          holdings={holdings}
+        />
+      ) : (
+        open && (
           <TradePanel
             marketId={market.id}
             qYes={market.qYes}
@@ -260,7 +230,8 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             yesShares={holdings["YES"] ?? 0}
             noShares={holdings["NO"] ?? 0}
           />
-        ))}
+        )
+      )}
 
       <ResolutionPanel
         marketId={market.id}

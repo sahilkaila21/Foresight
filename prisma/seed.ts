@@ -150,6 +150,24 @@ async function main() {
   await tradeCategorical(alice.id, election.id, 1, 110); // Republican
   await tradeCategorical(bob.id, election.id, 2, 15); // Independent
 
+  // World Cup: Spain vs Argentina, winner-take-all across three outcomes.
+  const worldCupLabels = ["Spain", "Argentina", "Draw"];
+  const worldCup = await prisma.market.create({
+    data: {
+      question: "Spain vs Argentina — who wins?",
+      description:
+        "World Cup match, Spain vs Argentina. Resolves to the team that wins in regulation/extra time/penalties per FIFA's official match result, or Draw if the official result is a tie (group-stage draw).",
+      kind: "CATEGORICAL",
+      category: "World Cup",
+      closesAt: new Date("2026-07-19T19:00:00Z"),
+      creatorId: alice.id,
+      outcomes: { create: worldCupLabels.map((label, i) => ({ label, sortOrder: i })) },
+    },
+  });
+  await tradeCategorical(bob.id, worldCup.id, 0, 140); // Spain
+  await tradeCategorical(alice.id, worldCup.id, 1, 95); // Argentina
+  await tradeCategorical(bob.id, worldCup.id, 2, 20); // Draw
+
   // Closed markets demonstrating each resolution phase. Bonds are staked by
   // deducting from the proposer/disputer, mirroring the API routes.
   const BOND = 50;
