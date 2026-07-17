@@ -22,7 +22,7 @@ function Tabs() {
   const items: [string, string][] = [["", "🔥 Trending"], ...CATEGORIES.map((c) => [c, `${CATEGORY_ICONS[c]} ${c}`] as [string, string])];
 
   return (
-    <div className="scrollbar-none flex gap-5 overflow-x-auto border-t border-zinc-100 px-4 dark:border-zinc-900">
+    <div className="mx-auto flex max-w-6xl flex-wrap justify-center gap-x-5 gap-y-1 border-t border-zinc-100 px-4 dark:border-zinc-900">
       {items.map(([value, label]) => {
         const active = category === value;
         return (

@@ -1,36 +1,22 @@
 /**
- * Seed demo data: two users (alice / bob, password "password123") and a few
- * markets — binary and categorical — with trades executed through the real
- * LMSR engine so quantities, balances, positions, and the ledger stay
- * consistent. Wipes market data first so it can be re-run safely.
+ * Seed the app with exactly two FIFA World Cup match markets and nothing else:
  *
- * Run with: npm run db:seed
+ *   • Spain vs Argentina — who wins?
+ *   • England vs France — who wins?
+ *
+ * Both are categorical (Team A / Team B / Draw). A handful of trades are run
+ * through the real LMSR engine so opening prices aren't flat. Demo users
+ * alice / bob / admin (password "password123") are kept for seeding trades and
+ * for admin resolution; real testers just sign up fresh.
+ *
+ * Wipes ALL existing market data first, so it's the single source of truth for
+ * a clean two-market slate. Run with: npm run db:seed
  */
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { buy, buyN, pricesN, probYes, type Outcome } from "../src/lib/lmsr";
+import { buyN, pricesN } from "../src/lib/lmsr";
 
 const prisma = new PrismaClient();
-
-async function tradeBinary(userId: string, marketId: string, outcome: Outcome, spend: number) {
-  const market = await prisma.market.findUniqueOrThrow({ where: { id: marketId } });
-  const r = buy({ qYes: market.qYes, qNo: market.qNo, b: market.liquidityB }, outcome, spend);
-  await prisma.$transaction([
-    prisma.market.update({
-      where: { id: marketId },
-      data: { qYes: r.newState.qYes, qNo: r.newState.qNo, volume: { increment: spend } },
-    }),
-    prisma.user.update({ where: { id: userId }, data: { balance: { decrement: spend } } }),
-    prisma.position.upsert({
-      where: { userId_marketId_outcome: { userId, marketId, outcome } },
-      create: { userId, marketId, outcome, shares: r.shares },
-      update: { shares: { increment: r.shares } },
-    }),
-    prisma.trade.create({
-      data: { marketId, userId, outcome, shares: r.shares, cost: spend, probAfter: r.probAfter },
-    }),
-  ]);
-}
 
 async function tradeCategorical(userId: string, marketId: string, outcomeIdx: number, spend: number) {
   const market = await prisma.market.findUniqueOrThrow({
@@ -64,7 +50,7 @@ async function tradeCategorical(userId: string, marketId: string, outcomeIdx: nu
 }
 
 async function main() {
-  // Clean slate for market data (users are upserted and their balances reset).
+  // Clean slate — wipe every market and all related data.
   await prisma.comment.deleteMany();
   await prisma.trade.deleteMany();
   await prisma.position.deleteMany();
@@ -88,172 +74,44 @@ async function main() {
     create: { username: "admin", passwordHash, isAdmin: true },
   });
 
-  const binaries = await Promise.all(
-    [
-      {
-        question: "Will SpaceX land Starship on Mars by end of 2028?",
-        description:
-          "Resolves YES if a SpaceX Starship vehicle performs a soft landing on the Martian surface before 2029-01-01 UTC, per official SpaceX or NASA confirmation.",
-        category: "Science",
-        closesAt: new Date("2028-12-31T23:59:00Z"),
-      },
-      {
-        question: "Will the S&P 500 close above 8,000 before the end of 2026?",
-        description: "Resolves YES if any official daily close of the S&P 500 index exceeds 8,000 in 2026.",
-        category: "Economics",
-        closesAt: new Date("2026-12-31T21:00:00Z"),
-      },
-      {
-        question: "Will it rain in Mumbai on New Year's Day 2027?",
-        description: "Resolves YES if IMD records measurable precipitation (≥0.1mm) at Santacruz station on 2027-01-01.",
-        category: "Science",
-        closesAt: new Date("2027-01-01T18:00:00Z"),
-      },
-      {
-        question: "Will Bitcoin close above $150,000 at any point in 2026?",
-        description: "Resolves YES if BTC/USD prints above 150,000 on a major exchange during 2026.",
-        category: "Crypto",
-        closesAt: new Date("2026-12-31T23:59:00Z"),
-      },
-      {
-        question: "Will a sequel be the highest-grossing film of 2027?",
-        description: "Resolves YES if the top worldwide box-office film of 2027 is a sequel or franchise entry.",
-        category: "Culture",
-        closesAt: new Date("2027-12-31T23:59:00Z"),
-      },
-    ].map((m) => prisma.market.create({ data: { ...m, creatorId: alice.id } }))
-  );
-
-  await tradeBinary(alice.id, binaries[0].id, "NO", 120);
-  await tradeBinary(bob.id, binaries[0].id, "YES", 40);
-  await tradeBinary(bob.id, binaries[1].id, "YES", 90);
-  await tradeBinary(alice.id, binaries[1].id, "YES", 30);
-  await tradeBinary(bob.id, binaries[2].id, "NO", 60);
-  await tradeBinary(bob.id, binaries[3].id, "YES", 200);
-  await tradeBinary(alice.id, binaries[3].id, "NO", 45);
-  await tradeBinary(alice.id, binaries[4].id, "YES", 25);
-
-  // A categorical (multiple-choice) market.
-  const labels = ["Democrat", "Republican", "Independent"];
-  const election = await prisma.market.create({
-    data: {
-      question: "Which party wins the 2028 US presidential election?",
-      description: "Resolves to the party of the winning candidate per certified electoral results.",
-      kind: "CATEGORICAL",
-      category: "Politics",
-      closesAt: new Date("2028-11-07T23:59:00Z"),
-      creatorId: alice.id,
-      outcomes: { create: labels.map((label, i) => ({ label, sortOrder: i })) },
-    },
-  });
-  await tradeCategorical(bob.id, election.id, 0, 80); // Democrat
-  await tradeCategorical(alice.id, election.id, 1, 110); // Republican
-  await tradeCategorical(bob.id, election.id, 2, 15); // Independent
-
-  // World Cup: Spain vs Argentina, winner-take-all across three outcomes.
-  const worldCupLabels = ["Spain", "Argentina", "Draw"];
-  const worldCup = await prisma.market.create({
-    data: {
-      question: "Spain vs Argentina — who wins?",
-      description:
-        "World Cup match, Spain vs Argentina. Resolves to the team that wins in regulation/extra time/penalties per FIFA's official match result, or Draw if the official result is a tie (group-stage draw).",
-      kind: "CATEGORICAL",
-      category: "World Cup",
-      closesAt: new Date("2026-07-19T19:00:00Z"),
-      creatorId: alice.id,
-      outcomes: { create: worldCupLabels.map((label, i) => ({ label, sortOrder: i })) },
-    },
-  });
-  await tradeCategorical(bob.id, worldCup.id, 0, 140); // Spain
-  await tradeCategorical(alice.id, worldCup.id, 1, 95); // Argentina
-  await tradeCategorical(bob.id, worldCup.id, 2, 20); // Draw
-
-  // Closed markets demonstrating each resolution phase. Bonds are staked by
-  // deducting from the proposer/disputer, mirroring the API routes.
-  const BOND = 50;
-  const past = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-  const closedMarket = (question: string) =>
-    prisma.market.create({
+  async function createMatch(teamA: string, teamB: string, closesAt: Date) {
+    const labels = [teamA, teamB, "Draw"];
+    return prisma.market.create({
       data: {
-        question,
-        description: "Demo market for the optimistic-oracle resolution flow.",
-        category: "Culture",
-        closesAt: past,
+        question: `${teamA} vs ${teamB} — who wins?`,
+        description:
+          `World Cup match, ${teamA} vs ${teamB}. Resolves to the team that wins in ` +
+          `regulation/extra time/penalties per FIFA's official match result, or Draw if the ` +
+          `official result is a tie (group-stage draw).`,
+        kind: "CATEGORICAL",
+        category: "World Cup",
+        closesAt,
         creatorId: alice.id,
+        outcomes: { create: labels.map((label, i) => ({ label, sortOrder: i })) },
       },
     });
+  }
 
-  // Phase: AWAITING_PROPOSAL — closed, nobody has proposed yet.
-  await closedMarket("Did the home team win last weekend's demo match?");
+  // Two future matches.
+  const spainArg = await createMatch("Spain", "Argentina", new Date("2026-07-19T19:00:00Z"));
+  await tradeCategorical(bob.id, spainArg.id, 0, 140); // Spain
+  await tradeCategorical(alice.id, spainArg.id, 1, 95); // Argentina
+  await tradeCategorical(bob.id, spainArg.id, 2, 20); // Draw
 
-  // Phase: IN_CHALLENGE — bob proposed YES, window still open.
-  const inChallenge = await closedMarket("Was the demo product launched on schedule?");
-  await prisma.user.update({ where: { id: bob.id }, data: { balance: { decrement: BOND } } });
-  await prisma.market.update({
-    where: { id: inChallenge.id },
-    data: {
-      proposedOutcome: "YES",
-      proposedById: bob.id,
-      proposedAt: new Date(),
-      challengeUntil: new Date(Date.now() + 12 * 60 * 60 * 1000),
-      proposerBond: BOND,
-    },
-  });
+  const engFra = await createMatch("England", "France", new Date("2026-07-22T19:00:00Z"));
+  await tradeCategorical(alice.id, engFra.id, 1, 120); // France
+  await tradeCategorical(bob.id, engFra.id, 0, 85); // England
+  await tradeCategorical(alice.id, engFra.id, 2, 20); // Draw
 
-  // Phase: DISPUTED — bob proposed YES, alice disputed; awaits admin.
-  const disputed = await closedMarket("Did the demo conference sell out?");
-  await prisma.user.update({ where: { id: bob.id }, data: { balance: { decrement: BOND } } });
-  await prisma.user.update({ where: { id: alice.id }, data: { balance: { decrement: BOND } } });
-  await prisma.market.update({
-    where: { id: disputed.id },
-    data: {
-      proposedOutcome: "YES",
-      proposedById: bob.id,
-      proposedAt: new Date(),
-      challengeUntil: new Date(Date.now() + 12 * 60 * 60 * 1000),
-      proposerBond: BOND,
-      disputed: true,
-      disputedById: alice.id,
-      disputerBond: BOND,
-    },
-  });
-
-  // Phase: READY_TO_FINALIZE — alice proposed NO, window elapsed, undisputed.
-  const ready = await closedMarket("Did the demo satellite reach orbit?");
-  await prisma.user.update({ where: { id: alice.id }, data: { balance: { decrement: BOND } } });
-  await prisma.market.update({
-    where: { id: ready.id },
-    data: {
-      proposedOutcome: "NO",
-      proposedById: alice.id,
-      proposedAt: past,
-      challengeUntil: new Date(Date.now() - 60 * 60 * 1000),
-      proposerBond: BOND,
-    },
-  });
-
-  for (const m of binaries) {
-    const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id } });
+  for (const m of [spainArg, engFra]) {
+    const f = await prisma.market.findUniqueOrThrow({ where: { id: m.id }, include: { outcomes: true } });
+    const sorted = [...f.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
+    const prices = pricesN(sorted.map((o) => o.q), f.liquidityB);
     console.log(
-      `  ${f.question} → ${Math.round(probYes({ qYes: f.qYes, qNo: f.qNo, b: f.liquidityB }) * 100)}% YES`
+      `  ${f.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
     );
   }
-  const e = await prisma.market.findUniqueOrThrow({
-    where: { id: election.id },
-    include: { outcomes: true },
-  });
-  const sorted = [...e.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
-  const prices = pricesN(
-    sorted.map((o) => o.q),
-    e.liquidityB
-  );
-  console.log(
-    `  ${e.question} → ${sorted.map((o, i) => `${o.label} ${Math.round(prices[i] * 100)}%`).join(", ")}`
-  );
-  console.log(
-    `Seeded: alice, bob & admin (password 'password123'), ${binaries.length} binary + 1 categorical ` +
-      `+ 4 resolution-demo markets.`
-  );
+  console.log("Seeded: alice, bob & admin (password 'password123') + 2 World Cup match markets.");
 }
 
 main()
