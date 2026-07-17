@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 interface Step {
   emoji: string;
@@ -92,7 +93,9 @@ export default function HowToUse() {
         <span>How to use?</span>
       </button>
 
-      {open && (
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           role="dialog"
@@ -106,17 +109,17 @@ export default function HowToUse() {
             tabIndex={-1}
           />
 
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-zinc-900">
+          <div className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl dark:bg-zinc-900">
             <button
               onClick={close}
-              className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800"
-              aria-label="Close"
+              className="absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-white/25 text-lg text-white backdrop-blur transition hover:bg-white/40"
+              aria-label="Close guide"
             >
               ✕
             </button>
 
             {/* Illustration area */}
-            <div className="flex h-44 items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600">
+            <div className="flex h-40 items-center justify-center rounded-t-3xl bg-gradient-to-br from-indigo-500 to-violet-600">
               <span className="text-7xl drop-shadow-lg">{current.emoji}</span>
             </div>
 
@@ -161,7 +164,8 @@ export default function HowToUse() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
