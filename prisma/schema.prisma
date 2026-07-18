@@ -28,7 +28,7 @@ model Market {
   category    String     @default("Other")
   kind        String     @default("BINARY") // "BINARY" | "CATEGORICAL"
   closesAt    DateTime
-  liquidityB  Float      @default(100)
+  liquidityB  Float      @default(20000)
   qYes        Float      @default(0) // binary only
   qNo         Float      @default(0) // binary only
   volume      Float      @default(0) // total |currency| traded, updated per trade
