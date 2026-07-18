@@ -107,7 +107,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         where: { id },
         data: { volume: { increment: Math.abs(cost) } },
       });
-      await tx.user.update({ where: { id: userId }, data: { balance: { decrement: cost } } });
+      // Placing a bet also clears the post-reset "please re-bet" notice.
+      await tx.user.update({
+        where: { id: userId },
+        data: { balance: { decrement: cost }, showResetNotice: false },
+      });
       await tx.position.upsert({
         where: { userId_marketId_outcome: { userId, marketId: id, outcome: key } },
         create: { userId, marketId: id, outcome: key, shares },
