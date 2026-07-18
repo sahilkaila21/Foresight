@@ -1,5 +1,6 @@
 import { flagUrl, teamMeta } from "@/lib/teams";
 import Countdown from "./Countdown";
+import KickoffTime from "./KickoffTime";
 
 interface Props {
   teamA: string;
@@ -51,12 +52,7 @@ export default function MatchHeader({
           </>
         ) : (
           <>
-            <div className="text-lg font-bold sm:text-xl">
-              {kickoff.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-            </div>
-            <div className="mt-0.5 text-xs text-zinc-500">
-              {kickoff.toLocaleDateString("en-US", { month: "long", day: "numeric" })}
-            </div>
+            <KickoffTime to={kickoff.toISOString()} />
             <div className="mt-1 text-xs text-zinc-500">
               <Countdown to={kickoff.toISOString()} />
             </div>
