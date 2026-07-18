@@ -24,6 +24,7 @@ import MatchChart from "@/components/MatchChart";
 import MatchHeader from "@/components/MatchHeader";
 import MatchTradePanel from "@/components/MatchTradePanel";
 import { type Series } from "@/components/MultiProbChart";
+import OpeningOddsControl from "@/components/OpeningOddsControl";
 import ProbChart from "@/components/ProbChart";
 import ResolutionPanel from "@/components/ResolutionPanel";
 import TradePanel from "@/components/TradePanel";
@@ -113,24 +114,37 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
   // Categorical history: only the traded outcome's price is stored per trade, so
   // replay the ledger through the engine to recover every outcome's price at each step.
   let catSeries: Series[] = [];
-  if (isCategorical && market.trades.length > 0) {
+  if (isCategorical) {
     const sorted = [...market.outcomes].sort((a, z) => a.sortOrder - z.sortOrder);
     const idxById = new Map(sorted.map((o, i) => [o.id, i]));
-    const q = sorted.map(() => 0);
-    const n = sorted.length;
-    const pts = sorted.map(() => [{ t: market.createdAt.getTime(), p: 1 / n }]);
+    // Opening q = current stored q minus everything traded since. Replaying
+    // from this baseline reproduces the admin-set opening odds and ends exactly
+    // at the live price (what the trade panel shows), so chart and buttons agree.
+    const openingQ = sorted.map((o) => o.q);
     for (const t of market.trades) {
       const idx = idxById.get(t.outcome);
-      if (idx === undefined) continue;
-      q[idx] += t.shares;
-      const prices = pricesN(q, market.liquidityB);
-      sorted.forEach((_, i) => pts[i].push({ t: t.createdAt.getTime(), p: prices[i] }));
+      if (idx !== undefined) openingQ[idx] -= t.shares;
     }
-    const endPrices = pricesN(q, market.liquidityB);
-    catSeries = sorted.map((o, i) => ({
-      label: o.label,
-      points: [...pts[i], { t: endT, p: endPrices[i] }],
-    }));
+    const openingPrices = pricesN(openingQ, market.liquidityB);
+    // Only draw a chart once there's something to show: real trades, or a
+    // skewed opening line. A brand-new even market has no history yet.
+    const skewed = openingPrices.some((p) => Math.abs(p - 1 / sorted.length) > 1e-6);
+    if (market.trades.length > 0 || skewed) {
+      const q = [...openingQ];
+      const pts = sorted.map((_, i) => [{ t: market.createdAt.getTime(), p: openingPrices[i] }]);
+      for (const t of market.trades) {
+        const idx = idxById.get(t.outcome);
+        if (idx === undefined) continue;
+        q[idx] += t.shares;
+        const prices = pricesN(q, market.liquidityB);
+        sorted.forEach((_, i) => pts[i].push({ t: t.createdAt.getTime(), p: prices[i] }));
+      }
+      const endPrices = pricesN(q, market.liquidityB);
+      catSeries = sorted.map((o, i) => ({
+        label: o.label,
+        points: [...pts[i], { t: endT, p: endPrices[i] }],
+      }));
+    }
   }
 
   const recentTrades = market.trades.slice(-30).reverse();
@@ -337,6 +351,17 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
                 matchMinute={market.matchMinute}
               />
             )}
+            {currentUser?.isAdmin && !market.resolution && market.trades.length === 0 && (
+              <OpeningOddsControl
+                marketId={market.id}
+                hasTrades={false}
+                outcomes={priced.map((o) => ({
+                  id: o.id,
+                  label: o.label,
+                  percent: Math.round(o.price * 100),
+                }))}
+              />
+            )}
             {open ? (
               <MatchTradePanel
                 marketId={market.id}
@@ -428,6 +453,17 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 
       {isCategorical ? (
         <>
+          {currentUser?.isAdmin && !market.resolution && market.trades.length === 0 && (
+            <OpeningOddsControl
+              marketId={market.id}
+              hasTrades={false}
+              outcomes={priced.map((o) => ({
+                id: o.id,
+                label: o.label,
+                percent: Math.round(o.price * 100),
+              }))}
+            />
+          )}
           {currentUser?.isAdmin && !market.resolution && (
             <AwardAdminControl
               marketId={market.id}
