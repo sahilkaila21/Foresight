@@ -2,11 +2,17 @@
  * One-off economy reset (keeps all markets & outcomes intact):
  *   • Clears every bet — deletes all Trade and Position rows.
  *   • Resets every user's balance to the ₱1000 starting cash.
- *   • Re-liquidities every market to b = NEW_B. Each market's share
- *     quantities q are scaled by (NEW_B / oldB) so the *current odds are
- *     preserved* (price = softmax(q/b) is invariant under scaling q and b
- *     together) while future trades move the price far less.
- *   • Zeroes each market's volume (bets are gone).
+ *   • Re-opens every market at even odds: share quantities q are zeroed and
+ *     liquidity is set to NEW_B, so buttons, headline, and the history chart
+ *     all agree.
+ *
+ * Why zero q (rather than preserve odds by scaling)? Prices are tracked two
+ * ways that must stay in lockstep: the stored Outcome.q (used by the trade
+ * panel + headline) and a replay of the Trade ledger from q=0 (used by the
+ * match/history chart). That invariant only holds when stored q equals the
+ * sum of a market's trades. Clearing trades therefore requires zeroing q too —
+ * otherwise the chart (ledger replay) and the buttons (stored q) diverge.
+ * A fresh market opens 50/50 (or 1/N) and moves as people trade.
  *
  * Unlike `seed.ts`, this does NOT drop markets/outcomes/comments, so any
  * markets you created in the app (and edits like added outcomes) survive.
@@ -17,7 +23,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const NEW_B = 20000;
+const NEW_B = 5000;
 const START_BALANCE = 1000;
 
 async function main() {
@@ -30,24 +36,33 @@ async function main() {
     data: { balance: START_BALANCE },
   });
 
-  // 3. Deepen liquidity on every market, preserving its current odds.
-  const markets = await prisma.market.findMany({ include: { outcomes: true } });
-  for (const m of markets) {
-    const k = NEW_B / m.liquidityB; // scale factor that keeps q/b (the price) fixed
-    await prisma.$transaction([
-      prisma.market.update({
-        where: { id: m.id },
-        data: { liquidityB: NEW_B, qYes: m.qYes * k, qNo: m.qNo * k, volume: 0 },
-      }),
-      ...m.outcomes.map((o) =>
-        prisma.outcome.update({ where: { id: o.id }, data: { q: o.q * k } })
-      ),
-    ]);
-  }
+  // 3. Re-open every market at even odds with the new liquidity depth.
+  //    Zeroing q keeps stored-q and the (now empty) trade ledger consistent.
+  const marketsReset = await prisma.market.updateMany({
+    data: {
+      liquidityB: NEW_B,
+      qYes: 0,
+      qNo: 0,
+      volume: 0,
+      // Clear any resolution / optimistic-oracle state back to a fresh open market.
+      resolution: null,
+      resolvedAt: null,
+      proposedOutcome: null,
+      proposedById: null,
+      proposedAt: null,
+      challengeUntil: null,
+      disputed: false,
+      disputedById: null,
+      proposerBond: 0,
+      disputerBond: 0,
+    },
+  });
+  const outcomesReset = await prisma.outcome.updateMany({ data: { q: 0 } });
 
   console.log(
     `Reset done: ${usersReset} users → ₱${START_BALANCE}, cleared ${tradesCleared} trades / ` +
-      `${positionsCleared} positions, set b=${NEW_B} on ${markets.length} markets (odds preserved).`
+      `${positionsCleared} positions, opened ${marketsReset.count} markets at even odds ` +
+      `(b=${NEW_B}, ${outcomesReset.count} outcomes zeroed).`
   );
 }
 

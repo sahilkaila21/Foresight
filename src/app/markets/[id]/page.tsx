@@ -16,6 +16,7 @@ import { marketPhase } from "@/lib/resolution";
 import { getCurrentUser } from "@/lib/session";
 import { teamMeta } from "@/lib/teams";
 import AutoRefresh from "@/components/AutoRefresh";
+import AwardAdminControl from "@/components/AwardAdminControl";
 import CategoricalMarketSection from "@/components/CategoricalMarketSection";
 import CommentSection from "@/components/CommentSection";
 import LiveScoreControl from "@/components/LiveScoreControl";
@@ -426,18 +427,27 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
       </div>
 
       {isCategorical ? (
-        <CategoricalMarketSection
-          series={catSeries}
-          positionBlock={positionBlock}
-          marketId={market.id}
-          outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
-          b={market.liquidityB}
-          resolution={market.resolution}
-          tradable={open}
-          signedIn={!!userId}
-          balance={currentUser?.balance ?? 0}
-          holdings={holdings}
-        />
+        <>
+          {currentUser?.isAdmin && !market.resolution && (
+            <AwardAdminControl
+              marketId={market.id}
+              outcomes={priced.map((o) => ({ id: o.id, label: o.label }))}
+              hasTrades={market.trades.length > 0}
+            />
+          )}
+          <CategoricalMarketSection
+            series={catSeries}
+            positionBlock={positionBlock}
+            marketId={market.id}
+            outcomes={priced.map((o) => ({ id: o.id, label: o.label, q: o.q }))}
+            b={market.liquidityB}
+            resolution={market.resolution}
+            tradable={open}
+            signedIn={!!userId}
+            balance={currentUser?.balance ?? 0}
+            holdings={holdings}
+          />
+        </>
       ) : (
         <>
           {market.trades.length > 0 && (
