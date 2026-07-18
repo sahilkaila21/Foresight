@@ -31,6 +31,11 @@ model Market {
   category    String     @default("Other")
   kind        String     @default("BINARY") // "BINARY" | "CATEGORICAL"
   closesAt    DateTime
+  // Actual kickoff/event start time for match markets (World Cup), shown on the
+  // card and match header. closesAt is the (later) trading cutoff, kept open
+  // past kickoff so betting continues during the match. Null for non-match
+  // markets, where closesAt alone is shown as "closes X".
+  matchStartsAt DateTime?
   liquidityB  Float      @default(5000)
   qYes        Float      @default(0) // binary only
   qNo         Float      @default(0) // binary only

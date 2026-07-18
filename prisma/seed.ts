@@ -74,7 +74,7 @@ async function main() {
     create: { username: "admin", passwordHash, isAdmin: true },
   });
 
-  async function createMatch(teamA: string, teamB: string, closesAt: Date) {
+  async function createMatch(teamA: string, teamB: string, matchStartsAt: Date, closesAt: Date) {
     const labels = [teamA, teamB];
     return prisma.market.create({
       data: {
@@ -84,6 +84,7 @@ async function main() {
           `(after extra time / penalties if needed) per FIFA's official match result.`,
         kind: "CATEGORICAL",
         category: "World Cup",
+        matchStartsAt,
         closesAt,
         creatorId: alice.id,
         outcomes: { create: labels.map((label, i) => ({ label, sortOrder: i })) },
@@ -92,11 +93,21 @@ async function main() {
   }
 
   // Two future matches, each a two-team (Team A / Team B) market.
-  const spainArg = await createMatch("Spain", "Argentina", new Date("2026-07-19T19:00:00Z"));
+  const spainArg = await createMatch(
+    "Spain",
+    "Argentina",
+    new Date("2026-07-19T19:00:00Z"),
+    new Date("2026-07-19T22:00:00Z")
+  );
   await tradeCategorical(alice.id, spainArg.id, 1, 150); // Argentina favored
   await tradeCategorical(bob.id, spainArg.id, 0, 95); // Spain
 
-  const engFra = await createMatch("France", "England", new Date("2026-07-18T17:00:00Z"));
+  const engFra = await createMatch(
+    "France",
+    "England",
+    new Date("2026-07-18T21:00:00Z"),
+    new Date("2026-07-19T00:00:00Z")
+  );
   await tradeCategorical(alice.id, engFra.id, 0, 160); // France favored
   await tradeCategorical(bob.id, engFra.id, 1, 80); // England
 

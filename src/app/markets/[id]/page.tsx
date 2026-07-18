@@ -324,7 +324,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
             <MatchHeader
               teamA={teamA}
               teamB={teamB}
-              kickoff={market.closesAt}
+              kickoff={market.matchStartsAt ?? market.closesAt}
               matchStatus={market.matchStatus}
               homeScore={market.homeScore}
               awayScore={market.awayScore}

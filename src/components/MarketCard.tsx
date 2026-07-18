@@ -112,7 +112,11 @@ export default function MarketCard({ m }: { m: MarketWithOutcomes }) {
         )}
         {!endingSoon && !isNew && (
           <span className="ml-auto">
-            {m.resolution ? "resolved" : closed ? "awaiting resolution" : formatDate(m.closesAt)}
+            {m.resolution
+              ? "resolved"
+              : closed
+                ? "awaiting resolution"
+                : formatDate(m.matchStartsAt ?? m.closesAt)}
           </span>
         )}
       </div>
