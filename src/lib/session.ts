@@ -48,6 +48,13 @@ export async function getCurrentUser() {
   if (!userId) return null;
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true, balance: true, isAdmin: true, createdAt: true },
+    select: {
+      id: true,
+      username: true,
+      balance: true,
+      isAdmin: true,
+      createdAt: true,
+      showResetNotice: true,
+    },
   });
 }

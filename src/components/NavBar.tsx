@@ -4,6 +4,7 @@ import { formatMoney } from "@/lib/format";
 import LogoutButton from "./LogoutButton";
 import CategoryTabs from "./CategoryTabs";
 import HowToUse from "./HowToUse";
+import ResetNotice from "./ResetNotice";
 import SearchBox from "./SearchBox";
 import ThemeToggle from "./ThemeToggle";
 
@@ -79,6 +80,7 @@ export default async function NavBar() {
         </div>
       </nav>
       <CategoryTabs />
+      {user?.showResetNotice && <ResetNotice />}
     </header>
   );
 }

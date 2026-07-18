@@ -31,9 +31,14 @@ async function main() {
   const { count: tradesCleared } = await prisma.trade.deleteMany();
   const { count: positionsCleared } = await prisma.position.deleteMany();
 
-  // 2. Everyone back to the starting stake.
+  // 2. Everyone back to the starting stake. Non-admin users get a one-time
+  //    "we reset the markets, please re-bet" banner on their next visit.
   const { count: usersReset } = await prisma.user.updateMany({
     data: { balance: START_BALANCE },
+  });
+  await prisma.user.updateMany({
+    where: { isAdmin: false },
+    data: { showResetNotice: true },
   });
 
   // 3. Re-open every market at even odds with the new liquidity depth.
