@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { fillLimitOrders } from "@/lib/limit";
 import { buy, buyN, sell, sellN, type Outcome } from "@/lib/lmsr";
 import { getSessionUserId } from "@/lib/session";
 
@@ -120,6 +121,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const row = await tx.trade.create({
         data: { marketId: id, userId, outcome: key, shares, cost, probAfter },
       });
+
+      // This trade just moved the price — settle any resting limit orders that
+      // are now in range (binary markets only; no-op otherwise).
+      await fillLimitOrders(tx, id);
 
       return { trade: row, probAfter, balance: user.balance - cost };
     });

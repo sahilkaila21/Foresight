@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { notify } from "@/lib/notify";
 import { getSessionUserId } from "@/lib/session";
 
 const MAX_LEN = 1000;
@@ -33,13 +34,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: `Comment must be under ${MAX_LEN} characters` }, { status: 400 });
   }
 
-  const market = await prisma.market.findUnique({ where: { id }, select: { id: true } });
+  const market = await prisma.market.findUnique({
+    where: { id },
+    select: { id: true, creatorId: true, question: true },
+  });
   if (!market) return NextResponse.json({ error: "Market not found" }, { status: 404 });
 
   const comment = await prisma.comment.create({
     data: { marketId: id, userId, body: text },
     include: { user: { select: { username: true } } },
   });
+
+  // Let the market's creator know someone weighed in (not on their own comment).
+  if (market.creatorId !== userId) {
+    await notify(
+      prisma,
+      market.creatorId,
+      "COMMENT",
+      `@${comment.user.username} commented on "${market.question}"`,
+      `/markets/${id}`
+    );
+  }
   return NextResponse.json(
     {
       id: comment.id,

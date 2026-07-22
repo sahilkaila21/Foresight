@@ -10,6 +10,7 @@ import {
   isClosed,
   nowMs,
 } from "@/lib/format";
+import { change24h } from "@/lib/history";
 import { pricesN, probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
 import { marketPhase } from "@/lib/resolution";
@@ -18,16 +19,22 @@ import { teamMeta } from "@/lib/teams";
 import AutoRefresh from "@/components/AutoRefresh";
 import AwardAdminControl from "@/components/AwardAdminControl";
 import CategoricalMarketSection from "@/components/CategoricalMarketSection";
+import ChangePill from "@/components/ChangePill";
 import CommentSection from "@/components/CommentSection";
+import LimitOrdersList from "@/components/LimitOrdersList";
 import LiveScoreControl from "@/components/LiveScoreControl";
+import MarketContext from "@/components/MarketContext";
+import MarketTabs, { type Tab } from "@/components/MarketTabs";
 import MatchChart from "@/components/MatchChart";
 import MatchHeader from "@/components/MatchHeader";
 import MatchTradePanel from "@/components/MatchTradePanel";
 import { type Series } from "@/components/MultiProbChart";
 import OpeningOddsControl from "@/components/OpeningOddsControl";
-import ProbChart from "@/components/ProbChart";
+import RangedProbChart from "@/components/RangedProbChart";
 import ResolutionPanel from "@/components/ResolutionPanel";
+import ShareButton from "@/components/ShareButton";
 import TradePanel from "@/components/TradePanel";
+import WatchButton from "@/components/WatchButton";
 
 export const dynamic = "force-dynamic";
 
@@ -54,10 +61,23 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
       })
     : [];
 
+  // Public holdings across all users, for the Top Holders / Positions tabs.
+  const allPositions = await prisma.position.findMany({
+    where: { marketId: id, shares: { gt: 1e-9 } },
+    orderBy: { shares: "desc" },
+    include: { user: { select: { username: true } } },
+  });
+
+  const watching = userId
+    ? !!(await prisma.watchlist.findUnique({
+        where: { userId_marketId: { userId, marketId: id } },
+      }))
+    : false;
+
   const comments = await prisma.comment.findMany({
     where: { marketId: id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { username: true } } },
+    include: { user: { select: { username: true } }, reactions: true },
   });
 
   const isCategorical = market.kind === "CATEGORICAL";
@@ -271,14 +291,98 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
     <CommentSection
       marketId={market.id}
       signedIn={!!userId}
-      initial={comments.map((c) => ({
-        id: c.id,
-        username: c.user.username,
-        body: c.body,
-        createdAt: c.createdAt.toISOString(),
-      }))}
+      initial={comments.map((c) => {
+        const counts = new Map<string, number>();
+        const mine = new Set<string>();
+        for (const r of c.reactions) {
+          counts.set(r.emoji, (counts.get(r.emoji) ?? 0) + 1);
+          if (r.userId === userId) mine.add(r.emoji);
+        }
+        return {
+          id: c.id,
+          username: c.user.username,
+          body: c.body,
+          createdAt: c.createdAt.toISOString(),
+          reactions: [...counts.entries()].map(([emoji, count]) => ({
+            emoji,
+            count,
+            mine: mine.has(emoji),
+          })),
+        };
+      })}
     />
   );
+
+  // Signed 24h change in YES probability (binary, unresolved only).
+  const change =
+    !isCategorical && !market.resolution
+      ? change24h(
+          market.trades.map((t) => ({ createdAt: t.createdAt, probAfter: t.probAfter })),
+          yesProb
+        )
+      : null;
+
+  // ----- Top Holders + public Positions tabs -----
+  const holdersBlock =
+    allPositions.length === 0 ? (
+      <p className="text-sm text-zinc-500">No holders yet.</p>
+    ) : (
+      <ul className="space-y-1.5 text-sm">
+        {allPositions.slice(0, 15).map((p, i) => {
+          const value = p.shares * priceOfKey(p.outcome);
+          return (
+            <li
+              key={p.id}
+              className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2 dark:border-zinc-900"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="w-5 shrink-0 font-mono text-xs text-zinc-400">{i + 1}</span>
+                <Link href={`/users/${p.user.username}`} className="font-medium hover:underline">
+                  @{p.user.username}
+                </Link>
+                <span className="text-zinc-400">·</span>
+                <span className="truncate text-zinc-500">{labelOf(p.outcome)}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="font-mono font-semibold">{formatShares(p.shares)}</span>
+                <span className="ml-2 font-mono text-xs text-zinc-400">{formatMoney(value)}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+
+  const allPositionsBlock =
+    allPositions.length === 0 ? (
+      <p className="text-sm text-zinc-500">Nobody holds a position yet.</p>
+    ) : (
+      <ul className="space-y-1.5 text-sm">
+        {allPositions.map((p) => (
+          <li
+            key={p.id}
+            className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2 dark:border-zinc-900"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Link href={`/users/${p.user.username}`} className="font-medium hover:underline">
+                @{p.user.username}
+              </Link>
+              <span className="text-zinc-400">holds</span>
+              <span className="truncate text-zinc-600 dark:text-zinc-400">{labelOf(p.outcome)}</span>
+            </span>
+            <span className="shrink-0 font-mono font-semibold">{formatShares(p.shares)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+
+  const marketTabs: Tab[] = [
+    { label: "Comments", badge: comments.length, content: commentsBlock },
+    { label: "Top Holders", badge: allPositions.length, content: holdersBlock },
+    { label: "Positions", content: allPositionsBlock },
+    { label: "Activity", content: recentTradesBlock },
+  ];
+  const tabsBlock = <MarketTabs tabs={marketTabs} />;
 
   // Payoff celebration: reconstruct the caller's net winning shares from their
   // trades on the winning outcome (positions are zeroed at resolution).
@@ -313,7 +417,18 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         {payoutBlock && <div className="lg:order-1 lg:col-span-3">{payoutBlock}</div>}
         <div className="space-y-6 lg:order-1 lg:col-span-2">
           <div>
-            <p className="text-xs font-medium text-zinc-500">Sports · World Cup</p>
+            <div className="mb-1 flex items-start justify-between gap-3">
+              <p className="text-xs font-medium text-zinc-500">Sports · World Cup</p>
+              <div className="flex items-center gap-1">
+                <WatchButton
+                  marketId={market.id}
+                  initialWatching={watching}
+                  signedIn={!!userId}
+                  size="md"
+                />
+                <ShareButton marketId={market.id} />
+              </div>
+            </div>
             <h1 className="mt-1 text-3xl font-bold tracking-tight">
               {teamA} <span className="text-zinc-400">–</span> {teamB}
             </h1>
@@ -385,10 +500,14 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               {market.description}
             </p>
           )}
+          <MarketContext
+            marketId={market.id}
+            context={market.context}
+            canEdit={!!currentUser?.isAdmin || userId === market.creatorId}
+          />
           {positionBlock}
           {resolutionBlock}
-          {recentTradesBlock}
-          {commentsBlock}
+          {tabsBlock}
         </div>
       </div>
     );
@@ -399,6 +518,10 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
       {!market.resolution && <AutoRefresh />}
       {payoutBlock}
       <div>
+        <div className="mb-2 flex items-center justify-end gap-1">
+          <WatchButton marketId={market.id} initialWatching={watching} signedIn={!!userId} size="md" />
+          <ShareButton marketId={market.id} />
+        </div>
         <div className="flex items-start justify-between gap-6">
           <h1 className="text-2xl font-bold">{market.question}</h1>
           {!isCategorical && (
@@ -414,8 +537,9 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               >
                 {market.resolution ?? formatPercent(yesProb)}
               </div>
-              <div className="text-xs text-zinc-500">
+              <div className="flex items-center justify-end gap-1.5 text-xs text-zinc-500">
                 {market.resolution ? "resolved" : "chance of YES"}
+                {change != null && <ChangePill delta={change} />}
               </div>
             </div>
           )}
@@ -450,6 +574,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
           </p>
         )}
       </div>
+
+      <MarketContext
+        marketId={market.id}
+        context={market.context}
+        canEdit={!!currentUser?.isAdmin || userId === market.creatorId}
+      />
 
       {isCategorical ? (
         <>
@@ -488,7 +618,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
         <>
           {market.trades.length > 0 && (
             <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-              <ProbChart points={chartPoints} />
+              <RangedProbChart points={chartPoints} />
             </div>
           )}
           {positionBlock}
@@ -504,12 +634,12 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
               noShares={holdings["NO"] ?? 0}
             />
           )}
+          {open && userId && <LimitOrdersList marketId={market.id} />}
         </>
       )}
 
       {resolutionBlock}
-      {recentTradesBlock}
-      {commentsBlock}
+      {tabsBlock}
     </div>
   );
 }

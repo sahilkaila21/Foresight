@@ -22,12 +22,20 @@ model User {
   trades       Trade[]
   positions    Position[]
   comments     Comment[]
+  reactions    CommentReaction[]
+  watchlist    Watchlist[]
+  notifications Notification[]
+  limitOrders  LimitOrder[]
+  combos       Combo[]
 }
 
 model Market {
   id          String     @id @default(cuid())
   question    String
   description String     @default("")
+  // Longer analysis paragraph explaining what's driving the odds (like
+  // Polymarket's "Market Context"). Empty until an admin/creator writes one.
+  context     String     @default("")
   category    String     @default("Other")
   kind        String     @default("BINARY") // "BINARY" | "CATEGORICAL"
   closesAt    DateTime
@@ -64,6 +72,9 @@ model Market {
   positions   Position[]
   comments    Comment[]
   outcomes    Outcome[]
+  watchers    Watchlist[]
+  limitOrders LimitOrder[]
+  comboLegs   ComboLeg[]
 }
 
 // Categorical-market outcomes. Each holds its own LMSR share quantity `q`.
@@ -116,6 +127,104 @@ model Comment {
   user      User     @relation(fields: [userId], references: [id])
   body      String
   createdAt DateTime @default(now())
+  reactions CommentReaction[]
 
   @@index([marketId, createdAt])
+}
+
+// Emoji reactions on comments. One row per (comment, user, emoji).
+model CommentReaction {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
+}
+
+// A user's saved/favorited markets.
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, marketId])
+  @@index([userId, createdAt])
+}
+
+// In-app notifications: market resolution, comments on your markets, limit-order
+// fills, combo settlement. `href` is a relative link the bell dropdown navigates to.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // "RESOLVED" | "COMMENT" | "LIMIT_FILLED" | "COMBO"
+  body      String
+  href      String   @default("")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+// A resting limit order: fills when the outcome's price crosses `limitProb`.
+// Buys fill when price <= limitProb (get in cheap); sells fill when price >= limitProb.
+// Filled opportunistically inside the trade route whenever another trade moves the price.
+model LimitOrder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  marketId  String
+  market    Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  outcome   String // "YES"/"NO" or Outcome id
+  side      String // "BUY" | "SELL"
+  limitProb Float // target price (0..1)
+  spend     Float    @default(0) // BUY: currency to spend when it fills
+  shares    Float    @default(0) // SELL: shares to sell when it fills
+  status    String   @default("OPEN") // "OPEN" | "FILLED" | "CANCELLED"
+  createdAt DateTime @default(now())
+  filledAt  DateTime?
+
+  @@index([marketId, status])
+  @@index([userId, status])
+}
+
+// A parlay: stake once, win only if EVERY leg resolves to its chosen outcome.
+// combinedProb = product of leg entry prices; payout = stake / combinedProb.
+model Combo {
+  id          String     @id @default(cuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  stake       Float
+  combinedProb Float
+  payout      Float // stake / combinedProb, paid if it wins
+  status      String     @default("OPEN") // "OPEN" | "WON" | "LOST"
+  createdAt   DateTime   @default(now())
+  settledAt   DateTime?
+  legs        ComboLeg[]
+
+  @@index([userId, status])
+}
+
+model ComboLeg {
+  id        String  @id @default(cuid())
+  comboId   String
+  combo     Combo   @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  marketId  String
+  market    Market  @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  outcome   String // chosen key: "YES"/"NO" or Outcome id
+  label     String // human label snapshot
+  question  String // market question snapshot
+  entryProb Float // price at time of placing
+  result    String  @default("PENDING") // "PENDING" | "WON" | "LOST"
+
+  @@index([comboId])
+  @@index([marketId])
 }

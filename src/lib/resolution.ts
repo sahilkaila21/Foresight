@@ -1,4 +1,6 @@
 import type { Prisma } from "@prisma/client";
+import { formatMoney } from "./format";
+import { notify } from "./notify";
 
 /**
  * Optimistic-oracle resolution.
@@ -61,15 +63,117 @@ export async function payoutWinners(
   marketId: string,
   winningKey: string
 ): Promise<void> {
-  const winners = await tx.position.findMany({
-    where: { marketId, outcome: winningKey, shares: { gt: 0 } },
+  const href = `/markets/${marketId}`;
+  const market = await tx.market.findUnique({
+    where: { id: marketId },
+    select: { question: true },
   });
-  for (const p of winners) {
-    await tx.user.update({ where: { id: p.userId }, data: { balance: { increment: p.shares } } });
+  const question = market?.question ?? "A market";
+
+  // Everyone with an open position (any outcome) gets a resolution notice; the
+  // winners get paid their shares (each winning share pays 1 currency unit).
+  const positions = await tx.position.findMany({
+    where: { marketId, shares: { gt: 1e-9 } },
+  });
+  for (const p of positions) {
+    if (p.outcome === winningKey) {
+      await tx.user.update({
+        where: { id: p.userId },
+        data: { balance: { increment: p.shares } },
+      });
+      await notify(
+        tx,
+        p.userId,
+        "RESOLVED",
+        `You won ${formatMoney(p.shares)} on "${question}"`,
+        href
+      );
+    } else {
+      await notify(tx, p.userId, "RESOLVED", `"${question}" resolved — better luck next time`, href);
+    }
   }
+
   await tx.position.updateMany({ where: { marketId }, data: { shares: 0 } });
   await tx.market.update({
     where: { id: marketId },
     data: { resolution: winningKey, resolvedAt: new Date() },
   });
+
+  // Any resting limit orders on this market can never fill now.
+  await tx.limitOrder.updateMany({
+    where: { marketId, status: "OPEN" },
+    data: { status: "CANCELLED" },
+  });
+
+  await settleCombosForMarket(tx, marketId, winningKey);
 }
+
+/**
+ * Mark every pending combo leg on this market won/lost, then settle any combo
+ * whose fate is now decided: one losing leg loses the whole parlay; all legs
+ * winning pays out `payout` (stake / combinedProb) to the owner.
+ */
+async function settleCombosForMarket(
+  tx: Prisma.TransactionClient,
+  marketId: string,
+  winningKey: string
+): Promise<void> {
+  const legs = await tx.comboLeg.findMany({
+    where: { marketId, result: "PENDING" },
+    select: { id: true, comboId: true, outcome: true },
+  });
+  if (legs.length === 0) return;
+
+  const affected = new Set<string>();
+  for (const leg of legs) {
+    const won = leg.outcome === winningKey;
+    await tx.comboLeg.update({
+      where: { id: leg.id },
+      data: { result: won ? "WON" : "LOST" },
+    });
+    affected.add(leg.comboId);
+  }
+
+  for (const comboId of affected) {
+    const combo = await tx.combo.findUnique({
+      where: { id: comboId },
+      include: { legs: true },
+    });
+    if (!combo || combo.status !== "OPEN") continue;
+
+    if (combo.legs.some((l) => l.result === "LOST")) {
+      await tx.combo.update({
+        where: { id: comboId },
+        data: { status: "LOST", settledAt: new Date() },
+      });
+      await notify(
+        tx,
+        combo.userId,
+        "COMBO",
+        `Your ${combo.legs.length}-leg combo missed — a leg resolved against you`,
+        "/combos"
+      );
+    } else if (combo.legs.every((l) => l.result === "WON")) {
+      await tx.user.update({
+        where: { id: combo.userId },
+        data: { balance: { increment: combo.payout } },
+      });
+      await tx.combo.update({
+        where: { id: comboId },
+        data: { status: "WON", settledAt: new Date() },
+      });
+      await notify(
+        tx,
+        combo.userId,
+        "COMBO",
+        `🎉 Your ${combo.legs.length}-leg combo hit! Paid ${formatMoney(combo.payout)}`,
+        "/combos"
+      );
+    }
+  }
+}
+
+// Re-exported so callers can settle combos referencing a market that was
+// resolved through a path other than payoutWinners, if ever needed.
+export { settleCombosForMarket };
+

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { clipToRange, type Range } from "@/lib/history";
 import CategoricalTradePanel, { type PanelOutcome } from "./CategoricalTradePanel";
 import MultiProbChart, { type Series } from "./MultiProbChart";
+import RangeTabs from "./RangeTabs";
 
 interface Props {
   series: Series[];
@@ -24,12 +26,15 @@ interface Props {
  */
 export default function CategoricalMarketSection({ series, positionBlock, ...panel }: Props) {
   const [selected, setSelected] = useState(0);
+  const [range, setRange] = useState<Range>("ALL");
+  const shownSeries = series.map((s) => ({ ...s, points: clipToRange(s.points, range) }));
 
   return (
     <>
       {series.length > 0 && (
         <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <MultiProbChart series={series} selected={selected} />
+          <RangeTabs value={range} onChange={setRange} />
+          <MultiProbChart series={shownSeries} selected={selected} />
         </div>
       )}
       {positionBlock}

@@ -4,6 +4,7 @@ import { formatMoney } from "@/lib/format";
 import LogoutButton from "./LogoutButton";
 import CategoryTabs from "./CategoryTabs";
 import HowToUse from "./HowToUse";
+import NotificationBell from "./NotificationBell";
 import ResetNotice from "./ResetNotice";
 import SearchBox from "./SearchBox";
 import ThemeToggle from "./ThemeToggle";
@@ -35,11 +36,25 @@ export default async function NavBar() {
                 Create
               </Link>
               <Link
+                href="/combos"
+                className="hidden text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-400 dark:hover:text-zinc-100"
+              >
+                Combos
+              </Link>
+              <Link
+                href="/watchlist"
+                className="hidden text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-400 dark:hover:text-zinc-100"
+                title="Watchlist"
+              >
+                ★
+              </Link>
+              <Link
                 href="/leaderboard"
                 className="hidden text-zinc-600 hover:text-zinc-900 sm:inline dark:text-zinc-400 dark:hover:text-zinc-100"
               >
                 Leaderboard
               </Link>
+              <NotificationBell />
               <Link
                 href="/portfolio"
                 className="font-mono font-semibold text-emerald-600 hover:underline dark:text-emerald-400"

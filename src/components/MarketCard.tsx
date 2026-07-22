@@ -5,6 +5,8 @@ import { formatCompact, formatDate, formatPercent, isClosed, nowMs } from "@/lib
 import { probYes } from "@/lib/lmsr";
 import { pricedOutcomes } from "@/lib/market";
 import { teamMeta } from "@/lib/teams";
+import ChangePill from "./ChangePill";
+import WatchButton from "./WatchButton";
 
 type MarketWithOutcomes = Prisma.MarketGetPayload<{
   include: { outcomes: true; _count: { select: { trades: true } } };
@@ -13,7 +15,17 @@ type MarketWithOutcomes = Prisma.MarketGetPayload<{
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_ROWS = 3;
 
-export default function MarketCard({ m }: { m: MarketWithOutcomes }) {
+export default function MarketCard({
+  m,
+  watching = false,
+  signedIn = false,
+  change24h = null,
+}: {
+  m: MarketWithOutcomes;
+  watching?: boolean;
+  signedIn?: boolean;
+  change24h?: number | null;
+}) {
   const now = nowMs();
   const closed = isClosed(m.closesAt);
   const isCat = m.kind === "CATEGORICAL";
@@ -45,8 +57,17 @@ export default function MarketCard({ m }: { m: MarketWithOutcomes }) {
         )}
         <p className="line-clamp-2 flex-1 text-sm font-semibold leading-snug">{m.question}</p>
         {!isCat && (
-          <BinaryPill qYes={m.qYes} qNo={m.qNo} b={m.liquidityB} resolution={m.resolution} />
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <BinaryPill qYes={m.qYes} qNo={m.qNo} b={m.liquidityB} resolution={m.resolution} />
+            {!m.resolution && change24h != null && <ChangePill delta={change24h} />}
+          </div>
         )}
+        <WatchButton
+          marketId={m.id}
+          initialWatching={watching}
+          signedIn={signedIn}
+          size="sm"
+        />
       </div>
 
       <div className="mt-3 flex-1 space-y-2">

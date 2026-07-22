@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
+import { cardData } from "@/lib/cards";
 import { isCategory } from "@/lib/categories";
 import { prisma } from "@/lib/db";
 import { formatMoney } from "@/lib/format";
@@ -103,6 +104,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     }
   }
 
+  const { watched, changes } = await cardData(currentUser?.id ?? null, markets);
+
   const showSidebar = !category && !q.trim() && status === "all";
 
   return (
@@ -170,7 +173,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {markets.map((m) => (
-            <MarketCard key={m.id} m={m} />
+            <MarketCard
+              key={m.id}
+              m={m}
+              watching={watched.has(m.id)}
+              signedIn={!!currentUser}
+              change24h={changes.get(m.id) ?? null}
+            />
           ))}
         </div>
       )}
